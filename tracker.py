@@ -71,37 +71,82 @@ kernel32 = ctypes.windll.kernel32
 psapi = ctypes.windll.psapi
 
 def get_active_window_info():
-    """获取当前前台窗口的标题和进程名（UWP 应用自动提取真实标题作为进程名）"""
-    hwnd = user32.GetForegroundWindow()
+    """获取当前前台窗口的标题和进程名
+
+    无管理员权限运行时，高权限窗口（任务管理器、系统设置等）会拒绝访问。
+    此时不崩溃，逐级降级返回可用信息。
+    降级链: 完整信息 → 仅进程名 → 'protected' → 'unknown'
+    """
+    try:
+        hwnd = user32.GetForegroundWindow()
+    except Exception:
+        return "Unknown", "unknown"
     if not hwnd:
         return "Unknown", "unknown"
 
-    # 窗口标题
-    length = user32.GetWindowTextLengthW(hwnd)
-    if length == 0:
-        title = "Unknown"
-    else:
-        buf = ctypes.create_unicode_buffer(length + 1)
-        user32.GetWindowTextW(hwnd, buf, length + 1)
-        title = buf.value or "Unknown"
+    # 窗口标题 — 访问拒绝时降级为 'Restricted Window'
+    title = "Unknown"
+    try:
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length == 0:
+            err = kernel32.GetLastError()
+            if err == 5:  # ERROR_ACCESS_DENIED
+                title = "Restricted Window"
+            else:
+                title = "Unknown"
+        else:
+            buf = ctypes.create_unicode_buffer(length + 1)
+            ret = user32.GetWindowTextW(hwnd, buf, length + 1)
+            if ret == 0:
+                err = kernel32.GetLastError()
+                if err == 5:
+                    title = "Restricted Window"
+                else:
+                    title = "Unknown"
+            else:
+                title = buf.value or "Unknown"
+    except Exception:
+        title = "Restricted Window"
 
-    # 进程名
-    pid = wintypes.DWORD()
-    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    if pid.value:
+    # 进程名 — 权限拒绝时分三级降级
+    proc = "unknown"
+    try:
+        pid = wintypes.DWORD()
+        ret = user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if ret == 0 or pid.value == 0:
+            err = kernel32.GetLastError()
+            if err == 5:
+                proc = "protected"
+                return title, proc
+            return title, "unknown"
+
         h_process = kernel32.OpenProcess(0x0400 | 0x0010, False, pid.value)
+        if not h_process:
+            err = kernel32.GetLastError()
+            if err == 5:  # ACCESS_DENIED — 系统进程
+                proc = "system"
+            else:
+                # 尝试只读权限重试
+                h_process = kernel32.OpenProcess(0x0010, False, pid.value)
+                if not h_process:
+                    proc = "protected"
+            if proc != "unknown":
+                return title, proc
+
         if h_process:
             exe_buf = ctypes.create_unicode_buffer(260)
             size = wintypes.DWORD(260)
             if psapi.GetModuleBaseNameW(h_process, None, exe_buf, size):
                 proc = exe_buf.value.lower().replace('.exe', '')
             else:
-                proc = "unknown"
+                err = kernel32.GetLastError()
+                proc = "protected" if err == 5 else "unknown"
             kernel32.CloseHandle(h_process)
         else:
-            proc = "unknown"
-    else:
-        proc = "unknown"
+            proc = "protected"
+    except Exception:
+        proc = "protected"
+        return title, proc
 
     # UWP 应用修复：ApplicationFrameHost.exe 代理了所有 UWP 窗口
     # 此时用窗口标题作为进程名，确保分类和统计正确
@@ -177,7 +222,8 @@ CATEGORY_TRAINING = [
                        'bilibili douyin youtube netflix twitch iqiyi youku potplayer vlc mpc movies',
                        'cloudmusic qqmusic spotify foobar music']),
     # 文件管理
-    ('other', ['explorer finder totalcmd everything']),
+    ('other', ['explorer finder totalcmd everything',
+               'system protected restricted']),
 ]
 
 class AppClassifier:
