@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useStore } from './store/useStore';
 import type { WeekStats } from './types';
 import { Sidebar } from './components/Sidebar';
@@ -30,8 +30,9 @@ export default function App() {
   // 追踪服务状态 (checking → online/offline)
   const [trackerStatus, setTrackerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [retryCount, setRetryCount] = useState(0);
+  const MAX_FAST_RETRIES = 3;
 
-  // 启动时健康检查（快速重试 3 次，间隔 2s）
+  // 启动时健康检查：快速重试 3 次（间隔 2s），之后降级为慢速轮询
   useEffect(() => {
     const check = async () => {
       try {
@@ -47,27 +48,31 @@ export default function App() {
   }, [retryCount]);
 
   useEffect(() => {
-    if (trackerStatus !== 'checking' || retryCount >= 3) return;
+    if (trackerStatus !== 'checking' || retryCount >= MAX_FAST_RETRIES) return;
     const t = setTimeout(() => setRetryCount(c => c + 1), 2000);
     return () => clearTimeout(t);
   }, [retryCount, trackerStatus]);
 
-  // 3 次重试后仍不通 → offline
+  // 快速重试耗尽 → 降级为慢速轮询（30s 间隔），由 syncLoop 驱动恢复
   useEffect(() => {
-    if (retryCount >= 3 && trackerStatus === 'checking') {
+    if (retryCount >= MAX_FAST_RETRIES && trackerStatus === 'checking') {
       setTrackerStatus('offline');
     }
   }, [retryCount, trackerStatus]);
+
+  // 用 ref 存储 trackerStatus，避免 syncLoop 依赖变化导致 interval 重建
+  const trackerStatusRef = useRef(trackerStatus);
+  trackerStatusRef.current = trackerStatus;
 
   // 全局同步真实活动数据到 store，供 CoachPanel、AnalyticsPanel 等使用
   const syncLoop = useCallback(async () => {
     try {
       const res = await fetch(`${API}/activity/stats`);
       const data = await res.json();
-      if (data && data.apps) {
-        setTrackerStatus('online');
+      if (data && (data.apps || data.totalActiveMinutes !== undefined)) {
+        if (trackerStatusRef.current !== 'online') setTrackerStatus('online');
         const today = new Date().toISOString().slice(0, 10);
-        const mapped = data.apps.map((r: any, i: number) => ({
+        const mapped = (data.apps || []).map((r: any, i: number) => ({
           id: `real-${i}`,
           appName: r.appName,
           category: r.category,
@@ -77,16 +82,16 @@ export default function App() {
         }));
         syncActivityLogs(mapped);
 
-        const studyMinutes = data.apps
+        const studyMinutes = (data.apps || [])
           .filter((a: any) => a.category === 'study')
           .reduce((sum: number, a: any) => sum + a.duration, 0);
         const focusHours = studyMinutes / 60;
         updateWeekStats({ focusHours });
       }
     } catch {
-      if (trackerStatus === 'online') setTrackerStatus('offline');
+      if (trackerStatusRef.current === 'online') setTrackerStatus('offline');
     }
-  }, [syncActivityLogs, updateWeekStats, trackerStatus]);
+  }, [syncActivityLogs, updateWeekStats]);
 
   useEffect(() => {
     syncLoop();

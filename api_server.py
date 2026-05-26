@@ -174,6 +174,9 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             else:
                 self.wfile.write(json.dumps({"error": "missing query param q"}).encode())
 
+        elif parsed.path == "/health":
+            self.wfile.write(json.dumps({"status": "ok", "db_exists": os.path.exists(DB_PATH)}).encode())
+
         else:
             self.wfile.write(json.dumps({"ok": True}).encode())
 
