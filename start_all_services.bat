@@ -23,7 +23,8 @@ powershell -Command "for ($i=0; $i -lt 10; $i++) { try { $r=Invoke-WebRequest -U
 echo ==================================================
 echo [3/4] 启动数据追踪与前端...
 echo ==================================================
-start "StudyPet-Tracker" /MIN python tracker.py
+echo 请在弹出的 UAC 窗口中点击"是"以授予 tracker 管理员权限...
+powershell -Command "Start-Process python -ArgumentList 'tracker.py' -WorkingDirectory '%cd%' -Verb RunAs -WindowStyle Minimized"
 start "StudyPet-Frontend(5173)" /MIN npx vite --host 0.0.0.0 --port 5173
 
 echo ==================================================
