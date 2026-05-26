@@ -1,0 +1,46 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-primary: #0f0f1a;
+  --bg-secondary: #1a1a2e;
+  --bg-tertiary: #12122a;
+  --bg-card: #1e1e3a;
+  --bg-input: #12122a;
+  --border: #252550;
+  --text-primary: #ddd;
+  --text-secondary: #999;
+  --text-muted: #666;
+  --accent: #4ecca3;
+  --gold: #ffd700;
+  --red: #e94560;
+  --red-soft: #ff6b6b;
+  --purple: #a855f7;
+  --blue: #0a84ff;
+  --orange: #ff8c00;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+input, textarea { font-family: inherit; }
