@@ -50,9 +50,9 @@ function inferSubject(title: string): SubjectKey | null {
 // ====== 计算公式说明（展示用） ======
 const FORMULAS = {
   subjectHours: '科目时长 = Σ(该科目已完成任务时长 + 追踪到学习时长) / 60',
-  focusScore: '专注度 = min(100, 平均连续学习会话分钟数 × 2)',
-  efficiency: '时段效率 = (学习分钟数 / (学习+娱乐分钟数)) × 100 × 专注系数',
-  lowEfficiency: '低效时段 = 效率 < 30% 且 总活跃 > 30分钟 或 会话切换 ≥ 6次/小时',
+  focusScore: '专注度 = min(100, 0.4×时长分 + 0.35×稳定性分 + 0.25×深度分) · 时长分=avgSession/90min×100 · 稳定性分=1/(1+变异系数)×100 · 深度分=长时间会话(>45min)占比×100',
+  efficiency: '时段效率 = (学习分钟数 / (学习+娱乐分钟数)) × 100 × 连续衰减系数',
+  lowEfficiency: '低效时段 = 基于用户自身效率分布的百分位检测（低于P25且活跃>20min）',
   comparison: '对比基准 = 你上周同期数据',
 };
 
@@ -152,10 +152,26 @@ export function AnalyticsPanel() {
       const cfg = SUBJECT_KEYWORDS[key];
       const totalHours = data.totalMin / 60;
       const avgPerDay = totalHours / Math.max(1, data.days.size);
-      // 专注度 = 基于平均连续学习会话时长：avgSessionMin × 2，上限 100
+      // 加权专注度模型
       const sessions = rawStudySessions[key] || [];
-      const avgSessionMin = sessions.length > 0 ? sessions.reduce((a, b) => a + b, 0) / sessions.length : 0;
-      const focusScore = Math.min(100, Math.round(avgSessionMin * 2));
+      let focusScore = 0;
+      if (sessions.length > 0) {
+        const avg = sessions.reduce((a, b) => a + b, 0) / sessions.length;
+        // 时长分：30分钟=50分，90分钟=100分，sigmoid 平滑
+        const durationScore = Math.min(100, (avg / 90) * 100);
+        // 稳定性分：变异系数越小越稳定
+        const variance = sessions.reduce((s, v) => s + (v - avg) ** 2, 0) / sessions.length;
+        const std = Math.sqrt(variance);
+        const cv = avg > 0 ? std / avg : 1; // 变异系数 0=完美稳定, >1=很不稳定
+        const stabilityScore = (1 / (1 + cv)) * 100;
+        // 深度分：>45分钟的长会话占比
+        const deepSessions = sessions.filter(s => s >= 45).length;
+        const depthScore = (deepSessions / sessions.length) * 100;
+        // 加权合成
+        focusScore = Math.round(
+          Math.min(100, 0.40 * durationScore + 0.35 * stabilityScore + 0.25 * depthScore)
+        );
+      }
       const issues: string[] = [];
       if (focusScore < 30) issues.push('专注度不足');
       if (avgPerDay < 0.5) issues.push('投入时间太少');
@@ -172,25 +188,25 @@ export function AnalyticsPanel() {
       const hour = parseInt(log.startTime.split(':')[0]);
       if (log.category === 'study') hourMap[hour].study += log.duration;
       else if (log.category === 'entertainment') hourMap[hour].ent += log.duration;
-      hourMap[hour].sessions += 1; // 每一条 log 代表一个会话
+      hourMap[hour].sessions += 1;
     });
+    // 连续衰减函数替代阶梯式惩罚：penalty = 1 / (1 + e^((sessions - 8) / 2.5))
+    const sessionPenaltyFn = (sessions: number) => 1 / (1 + Math.exp((sessions - 8) / 2.5));
     const timeStats: TimeSlotStats[] = Object.entries(hourMap).map(([hourStr, data]) => {
       const hour = parseInt(hourStr);
       const total = data.study + data.ent;
-      // 会话切换频率惩罚：>6次/小时 效率打8折，>10次/小时 打6折
-      const sessionPenalty = data.sessions > 10 ? 0.6 : data.sessions > 6 ? 0.8 : 1.0;
       const rawEfficiency = total > 0 ? Math.round((data.study / total) * 100) : 0;
-      const efficiency = Math.round(rawEfficiency * sessionPenalty);
+      const efficiency = Math.round(rawEfficiency * sessionPenaltyFn(data.sessions));
       return { hour, studyMinutes: data.study, entertainmentMinutes: data.ent, efficiency };
     });
     setTimeStats(timeStats);
-    // 低效 = 效率<30% 且 活跃>30分钟；或 会话切换≥10次且效率<50%
+    // 基于用户自身效率分布的百分位检测（替代硬编码 <30%）
+    const activeSlots = timeStats.filter(ts => ts.studyMinutes + ts.entertainmentMinutes > 20);
+    const efficiencies = activeSlots.map(ts => ts.efficiency).sort((a, b) => a - b);
+    const p25 = efficiencies.length > 0 ? efficiencies[Math.floor(efficiencies.length * 0.25)] : 30;
     const lowHours = timeStats.filter(ts => {
-      if (ts.studyMinutes + ts.entertainmentMinutes <= 30) return false;
-      if (ts.efficiency < 30) return true;
-      const hourData = hourMap[ts.hour];
-      if (hourData && hourData.sessions >= 10 && ts.efficiency < 50) return true;
-      return false;
+      if (ts.studyMinutes + ts.entertainmentMinutes <= 20) return false;
+      return ts.efficiency <= p25;
     }).map(ts => ts.hour);
     setLowEfficiencyHours(lowHours);
 

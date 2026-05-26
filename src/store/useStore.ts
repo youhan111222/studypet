@@ -52,16 +52,65 @@ const defaultTasks: Task[] = [];
 
 const defaultPet: Pet = { name: '学习宠物', level: 1, exp: 0, expToNext: 100, hearts: 0, mood: 'normal', coins: 0 };
 
-const defaultAchievements: Achievement[] = [
-  { id: 'a1', icon: '🔥', title: '初露锋芒', desc: '连续3天完成任务', unlocked: false, progress: 0, total: 3 },
-  { id: 'a2', icon: '⚡', title: '深度专注', desc: '单次专注3小时', unlocked: false, progress: 0, total: 3 },
-  { id: 'a3', icon: '🌅', title: '早起鸟儿', desc: '7点前开始学习', unlocked: false, progress: 0, total: 1 },
-  { id: 'a4', icon: '🏆', title: '全勤月', desc: '本月每天都有学习', unlocked: false, progress: 0, total: 30 },
-  { id: 'a5', icon: '📚', title: '学海无涯', desc: '累计专注100小时', unlocked: false, progress: 0, total: 100 },
-  { id: 'a6', icon: '💪', title: '永不言弃', desc: '连续30天打卡', unlocked: false, progress: 0, total: 30 },
-  { id: 'a7', icon: '🎯', title: 'DDL杀手', desc: '提前3天完成DDL', unlocked: false, progress: 0, total: 3 },
-  { id: 'a8', icon: '🌟', title: '满级大佬', desc: '宠物达到Lv.50', unlocked: false, progress: 0, total: 50 },
-];
+// ====== 成就策略模式 —— 每个成就自带 evaluate 函数 ======
+// 新增成就只需添加一个对象，无需修改 toggleTask 中的任何逻辑代码
+interface AchievementDef {
+  id: string; icon: string; title: string; desc: string; total: number;
+  /** 完成任务时调用，返回新的 progress 值 */
+  onTaskComplete?: (ctx: { task: Task; state: Store; today: string }) => number;
+  /** 状态变化时调用（如 streak、pet.level 更新后），返回 progress */
+  onStateTick?: (ctx: { state: Store; streak: number }) => number;
+}
+
+export const ACHIEVEMENT_DEFS: Record<string, AchievementDef> = {
+  a1: { id: 'a1', icon: '🔥', title: '初露锋芒', desc: '连续3天完成任务', total: 3,
+    onStateTick: ({ streak }) => streak },
+  a2: { id: 'a2', icon: '⚡', title: '深度专注', desc: '单次专注3小时', total: 3,
+    onTaskComplete: ({ task }) => task.duration >= 180 ? 1 : 0 },
+  a3: { id: 'a3', icon: '🌅', title: '早起鸟儿', desc: '7点前开始学习', total: 1,
+    onTaskComplete: () => {
+      const hour = new Date().getHours();
+      return hour < 7 ? 1 : 0;
+    }},
+  a4: { id: 'a4', icon: '🏆', title: '全勤月', desc: '本月每天都有学习', total: 30,
+    onStateTick: ({ state, streak }) => {
+      const month = new Date().toISOString().slice(0, 7);
+      const studyDaysThisMonth = new Set(
+        state.activityLogs.filter(l => l.date.startsWith(month) && l.category === 'study').map(l => l.date)
+      );
+      return Math.min(30, studyDaysThisMonth.size);
+    }},
+  a5: { id: 'a5', icon: '📚', title: '学海无涯', desc: '累计专注100小时', total: 100,
+    onTaskComplete: ({ task, state }) => {
+      const currentHours = state.achievements.find(a => a.id === 'a5')?.progress || 0;
+      return currentHours + task.duration / 60;
+    }},
+  a6: { id: 'a6', icon: '💪', title: '永不言弃', desc: '连续30天打卡', total: 30,
+    onStateTick: ({ streak }) => streak },
+  a7: { id: 'a7', icon: '🎯', title: 'DDL杀手', desc: '提前3天完成DDL', total: 3,
+    onTaskComplete: ({ task, state }) => {
+      if (!task.deadline) return state.achievements.find(a => a.id === 'a7')?.progress || 0;
+      const current = state.achievements.find(a => a.id === 'a7')?.progress || 0;
+      // 支持两种 DDL 格式：日期字符串 "2026-06-01" 或相对中文 "3天后"
+      const dateMatch = task.deadline.match(/(\d+)\s*天/);
+      if (dateMatch) {
+        return current + (parseInt(dateMatch[1]) >= 3 ? 1 : 0);
+      }
+      const deadlineDate = new Date(task.deadline);
+      if (!isNaN(deadlineDate.getTime())) {
+        const daysEarly = Math.ceil((deadlineDate.getTime() - Date.now()) / 86400000);
+        return current + (daysEarly >= 3 ? 1 : 0);
+      }
+      return current;
+    }},
+  a8: { id: 'a8', icon: '🌟', title: '满级大佬', desc: '宠物达到Lv.50', total: 50,
+    onStateTick: ({ state }) => state.pet.level },
+};
+
+const defaultAchievements: Achievement[] = Object.values(ACHIEVEMENT_DEFS).map(d => ({
+  id: d.id, icon: d.icon, title: d.title, desc: d.desc,
+  unlocked: false, progress: 0, total: d.total,
+}));
 
 const defaultSchedule: ScheduleItem[] = scheduleData;
 
@@ -151,34 +200,12 @@ export const useStore = create<Store>()(
             updates.subjectProgress = subjectProgress;
           }
           
-          // 4. 成就进度更新
+          // 4. 成就进度更新（策略模式：每个成就自带 evaluate 函数）
           const achievements = state.achievements.map(ach => {
-            let progress = ach.progress;
-            if (ach.id === 'a1') { // 连续3天完成任务 → 由 streak 覆盖
-            } else if (ach.id === 'a2') {
-              progress = Math.min(ach.total, progress + 1);
-            } else if (ach.id === 'a3') {
-              progress = Math.min(ach.total, progress + 1);
-            } else if (ach.id === 'a4') {
-              const month = today.slice(0, 7);
-              const studyDaysThisMonth = new Set(
-                state.activityLogs
-                  .filter(l => l.date.startsWith(month) && l.category === 'study')
-                  .map(l => l.date)
-              ).size;
-              progress = Math.min(ach.total, studyDaysThisMonth + 1);
-            } else if (ach.id === 'a5') {
-              progress = Math.min(ach.total, progress + task.duration / 60);
-            } else if (ach.id === 'a6') {
-            } else if (ach.id === 'a7') {
-              if (task.deadline && task.deadline.includes('天')) {
-                progress = Math.min(ach.total, progress + 1);
-              }
-            } else if (ach.id === 'a8') {
-              progress = Math.min(ach.total, pet.level);
-            }
-            const unlocked = progress >= ach.total;
-            return { ...ach, progress, unlocked };
+            const def = ACHIEVEMENT_DEFS[ach.id];
+            if (!def || !def.onTaskComplete) return ach;
+            const progress = def.onTaskComplete({ task: task!, state, today });
+            return { ...ach, progress, unlocked: progress >= ach.total };
           });
           updates.achievements = achievements;
         }
@@ -207,14 +234,13 @@ export const useStore = create<Store>()(
         }
         updates.streak = streak;
         
-        // 6. 更新成就 a1 (连续3天) 和 a6 (连续30天打卡)
-        const finalAchievements = (updates.achievements || state.achievements).map(ach => {
-          if (ach.id === 'a1') {
-            return { ...ach, progress: streak, unlocked: streak >= ach.total };
-          } else if (ach.id === 'a6') {
-            return { ...ach, progress: streak, unlocked: streak >= ach.total };
-          }
-          return ach;
+        // 6. 更新基于全局状态的成就（如 streak、level）
+        const baseAchievements = updates.achievements || state.achievements;
+        const finalAchievements = baseAchievements.map(ach => {
+          const def = ACHIEVEMENT_DEFS[ach.id];
+          if (!def || !def.onStateTick) return ach;
+          const progress = def.onStateTick({ state: { ...state, ...updates }, streak });
+          return { ...ach, progress, unlocked: progress >= ach.total };
         });
         updates.achievements = finalAchievements;
         

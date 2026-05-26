@@ -150,46 +150,149 @@ def get_idle_seconds():
     return idle_sec
 
 
-# === 分类规则 ===
-CATEGORIES = [
+# === TF-IDF 应用分类器 ===
+# 不再死板关键词匹配，而是基于特征向量相似度评分
+# 已知应用用关键词快速命中，未知应用用 n-gram 向量推断
+
+import math
+from collections import Counter
+
+# 训练语料：每个分类有多个"文档"（关键词组）
+CATEGORY_TRAINING = [
     # 学习/开发
-    (['vscode', 'code', 'visual studio', 'pycharm', 'intellij', 'idea', 'eclipse',
-      'webstorm', 'sublime', 'notepad++', 'notepad', 'atom'], 'study'),
-    (['terminal', 'cmd', 'powershell', 'windows terminal', 'conhost', 'alacritty'], 'study'),
-    (['word', 'excel', 'powerpoint', 'outlook', 'onenote', 'winword', 'wps'], 'study'),
-    (['pdf', 'acrobat', 'sumatra', 'foxit'], 'study'),
-    (['notion', 'obsidian', 'typora', 'logseq', 'joplin', 'evernote'], 'study'),
-    (['xmind', 'mindmaster', 'drawio'], 'study'),
-    (['matlab', 'rstudio', 'jupyter', 'spyder', 'anaconda'], 'study'),
-
+    ('study', ['vscode code visual-studio pycharm intellij idea eclipse webstorm sublime notepad++ notepad atom',
+               'terminal cmd powershell windows-terminal conhost alacritty',
+               'word excel powerpoint outlook onenote winword wps',
+               'pdf acrobat sumatra foxit',
+               'notion obsidian typora logseq joplin evernote',
+               'xmind mindmaster drawio',
+               'matlab rstudio jupyter spyder anaconda',
+               'photoshop illustrator figma sketch blender premiere afterfx']),
     # 浏览器
-    (['chrome', 'msedge', 'firefox', 'brave', 'opera', 'browser'], 'browser'),
-
+    ('browser', ['chrome msedge firefox brave opera browser edge chromium']),
     # 社交/通讯
-    (['微信', 'wechat', 'weixin', 'qq', '钉钉', 'dingtalk', 'tim', 'telegram',
-      'discord', 'slack', 'teams', '飞书', 'lark', 'skype'], 'social'),
-
+    ('social', ['wechat weixin qq dingtalk tim telegram discord slack teams lark skype']),
     # 娱乐
-    (['steam', 'epicgames', 'battle.net', 'origin', 'ubisoft', 'riot'], 'entertainment'),
-    (['bilibili', '抖音', 'douyin', 'youtube', 'netflix', 'twitch', 'iqiyi', 'youku',
-      '腾讯视频', '芒果tv', 'potplayer', 'vlc', 'mpc', 'movies'], 'entertainment'),
-    (['cloudmusic', 'qqmusic', 'spotify', 'foobar', 'music', '网易云', '酷狗', '千千'], 'entertainment'),
-
-    # 设计/创作
-    (['photoshop', 'illustrator', 'figma', 'sketch', 'blender', 'premiere', 'afterfx'], 'study'),
-
+    ('entertainment', ['steam epicgames battle.net origin ubisoft riot',
+                       'bilibili douyin youtube netflix twitch iqiyi youku potplayer vlc mpc movies',
+                       'cloudmusic qqmusic spotify foobar music']),
     # 文件管理
-    (['explorer', 'finder', 'totalcmd', 'everything'], 'other'),
+    ('other', ['explorer finder totalcmd everything']),
 ]
+
+class AppClassifier:
+    """基于 TF-IDF 向量 + 关键词得分的混合分类器"""
+
+    def __init__(self):
+        self.categories = list(set(c for c, _ in CATEGORY_TRAINING))
+        # 构建每个分类的 TF-IDF 特征向量
+        self.category_vectors = {}  # cat -> {token: tfidf_score}
+        self._build_index()
+
+    def _tokenize(self, text):
+        """提取字符 2-4 gram + 单词 token"""
+        t = text.lower()
+        tokens = []
+        # 单词 token
+        words = t.replace('-', ' ').replace('_', ' ').split()
+        tokens.extend(words)
+        # 字符 n-gram (2-4)，捕获子串特征如 "ode" 匹配 "vscode"
+        clean = t.replace(' ', '')
+        for n in [2, 3, 4]:
+            for i in range(len(clean) - n + 1):
+                tokens.append(clean[i:i+n])
+        return tokens
+
+    def _build_index(self):
+        """构建 TF-IDF 索引"""
+        # 收集所有文档
+        all_docs = []  # [(cat, tokens)]
+        for cat, doc_list in CATEGORY_TRAINING:
+            for doc in doc_list:
+                tokens = self._tokenize(doc)
+                all_docs.append((cat, tokens))
+
+        # 计算 IDF
+        total_docs = len(all_docs)
+        doc_freq = Counter()
+        for _, tokens in all_docs:
+            for token in set(tokens):
+                doc_freq[token] += 1
+
+        self.idf = {token: math.log(total_docs / (freq + 1)) + 1
+                    for token, freq in doc_freq.items()}
+
+        # 为每个分类计算 TF-IDF 质心向量
+        cat_vectors = {cat: Counter() for cat in self.categories}
+        cat_counts = {cat: 0 for cat in self.categories}
+        for cat, tokens in all_docs:
+            cat_counts[cat] += 1
+            tf = Counter(tokens)
+            for token, count in tf.items():
+                cat_vectors[cat][token] += (count / len(tokens)) * self.idf.get(token, 0)
+
+        # 取平均得到质心
+        self.category_vectors = {}
+        for cat in self.categories:
+            if cat_counts[cat] > 0:
+                n = cat_counts[cat]
+                self.category_vectors[cat] = {t: v/n for t, v in cat_vectors[cat].items()}
+            else:
+                self.category_vectors[cat] = {}
+
+        # 快速关键词索引（保留原关键词匹配作为加速路径）
+        self.keyword_map = {}  # keyword -> cat
+        for cat, doc_list in CATEGORY_TRAINING:
+            for doc in doc_list:
+                for word in doc.split():
+                    self.keyword_map[word] = cat
+
+    def classify(self, title, proc):
+        """返回 (category, confidence) — confidence 0-1"""
+        text = f"{title} {proc}".lower()
+
+        # 快速路径：精确关键词命中
+        for word in text.replace('-', ' ').replace('_', ' ').split():
+            if word in self.keyword_map:
+                return self.keyword_map[word], 1.0
+
+        # 慢速路径：TF-IDF 向量相似度
+        tokens = self._tokenize(text)
+        if not tokens:
+            return 'other', 0.0
+
+        # 输入文本的 TF 向量
+        tf = Counter(tokens)
+        input_vector = {token: (count / len(tokens)) * self.idf.get(token, 1.0)
+                       for token, count in tf.items()}
+
+        # 余弦相似度
+        scores = {}
+        input_norm = math.sqrt(sum(v**2 for v in input_vector.values()))
+        if input_norm == 0:
+            return 'other', 0.0
+
+        for cat, cat_vec in self.category_vectors.items():
+            dot = sum(input_vector.get(t, 0) * cat_vec.get(t, 0) for t in input_vector)
+            cat_norm = math.sqrt(sum(v**2 for v in cat_vec.values()))
+            if cat_norm > 0:
+                scores[cat] = dot / (input_norm * cat_norm)
+            else:
+                scores[cat] = 0.0
+
+        best_cat = max(scores, key=scores.get)
+        return best_cat, scores[best_cat]
+
+# 全局分类器实例
+_classifier = AppClassifier()
 
 
 def classify(title, proc):
-    t = (title + ' ' + proc).lower()
-    for keywords, cat in CATEGORIES:
-        for kw in keywords:
-            if kw in t:
-                return cat
-    return 'other'
+    """分类入口：返回 category 字符串"""
+    cat, confidence = _classifier.classify(title, proc)
+    if confidence < 0.05:
+        return 'other'
+    return cat
 
 
 # === 主循环 ===
