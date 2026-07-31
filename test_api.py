@@ -42,14 +42,14 @@ def api_get(url):
     return json.loads(resp.read().decode())
 
 
-def api_post(url, payload):
+def api_post(url, payload, timeout=5):
     req = urllib.request.Request(
         url,
         method="POST",
         data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"},
     )
-    resp = urllib.request.urlopen(req, timeout=5)
+    resp = urllib.request.urlopen(req, timeout=timeout)
     return json.loads(resp.read().decode())
 
 
@@ -165,6 +165,67 @@ def test_deepseek_key_masked(api_server):
         key = body.get("key", "")
         assert "****" in key
         assert len(key.replace("****", "")) <= 4
+
+
+# ===== RAG 语义检索测试 =====
+
+@pytest.fixture(scope="session")
+def rag_index(sb_root):
+    """在临时目录建 3 条中文笔记的 ChromaDB 索引（不碰真实库/真实笔记）"""
+    idx_dir = sb_root / ".rag-index"
+    idx_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    import chromadb
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
+    client = chromadb.PersistentClient(str(idx_dir))
+    try:
+        client.delete_collection("secondbrain")
+    except Exception:
+        pass
+    col = client.create_collection("secondbrain")
+    docs = [
+        "运算放大器有两个重要特性：虚短和虚断。虚短指同相输入端与反相输入端电位近似相等，虚断指输入电流近似为零。",
+        "高数极限：洛必达法则适用于 0/0 或 ∞/∞ 型不定式，使用前必须验证条件，不能盲目套用。",
+        "政治：实践是检验真理的唯一标准，这是马克思主义认识论的基本观点，出自《实践论》。",
+    ]
+    metas = [
+        {"source": str(sb_root / "10-知识库" / "电子技术基础" / "运放.md"), "subject": "电子技术", "header": "运放特性", "file": "运放.md"},
+        {"source": str(sb_root / "10-知识库" / "高数" / "洛必达.md"), "subject": "高数", "header": "洛必达法则", "file": "洛必达.md"},
+        {"source": str(sb_root / "10-知识库" / "政治" / "认识论.md"), "subject": "政治", "header": "实践论", "file": "认识论.md"},
+    ]
+    embs = model.encode(docs).tolist()
+    col.add(ids=["1", "2", "3"], embeddings=embs, documents=docs, metadatas=metas)
+    return model
+
+
+def test_rag_query_route(api_server, rag_index):
+    # POST 检索：运放问题应命中运放笔记（首次请求含模型加载，放宽超时）
+    body = api_post(f"{api_server}/rag/query", {"q": "运放虚短虚断是什么", "top_k": 3}, timeout=120)
+    items = body.get("items", [])
+    assert len(items) >= 1
+    assert "运放" in items[0]["file"]
+    assert "score" in items[0]
+    assert "snippet" in items[0]
+
+
+def test_rag_query_get(api_server, rag_index):
+    # GET 检索：subject 过滤（首次加载后模型已常驻，放宽超时兜底）
+    from urllib.parse import quote
+    resp = urllib.request.urlopen(
+        f"{api_server}/rag/query?q={quote('洛必达 0/0', safe='')}&subject={quote('高数', safe='')}&top_k=1", timeout=120
+    )
+    body = json.loads(resp.read().decode())
+    items = body.get("items", [])
+    assert len(items) == 1
+    assert items[0]["subject"] == "高数"
+
+
+def test_rag_query_empty(api_server, rag_index):
+    # 空 q 返回错误而非崩溃
+    body = api_post(f"{api_server}/rag/query", {"q": "  "})
+    assert body.get("error")
 
 
 # ===== SecondBrain 路由 =====

@@ -4,6 +4,7 @@ import re
 import sqlite3
 import os
 import sys
+import threading
 import urllib.parse
 import socketserver
 import requests as req_lib
@@ -22,6 +23,60 @@ TRACKER_PATH = os.path.join(SECOND_BRAIN_ROOT, r"15-元知识\学习系统\📌 
 MISTAKES_DIR = os.path.join(SECOND_BRAIN_ROOT, "10-知识库")
 DIARY_DIR = os.path.join(SECOND_BRAIN_ROOT, "20-日记")
 STATE_PATH = os.path.join(SECOND_BRAIN_ROOT, "memory-bank", "claude-code-memory", "learning-state.md")
+
+# ===== SecondBrain RAG（向量语义检索） =====
+RAG_INDEX_DIR = os.path.join(SECOND_BRAIN_ROOT, ".rag-index")
+_RAG_MODEL = None
+_RAG_COLLECTION = None
+_RAG_LOAD_LOCK = threading.Lock()
+
+
+def _rag_load():
+    """lazy load 嵌入模型 + ChromaDB collection（进程内常驻，只加载一次）"""
+    global _RAG_MODEL, _RAG_COLLECTION
+    if _RAG_COLLECTION is not None:
+        return _RAG_COLLECTION
+    with _RAG_LOAD_LOCK:
+        if _RAG_COLLECTION is not None:
+            return _RAG_COLLECTION
+        if not os.path.exists(RAG_INDEX_DIR):
+            return None
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        from sentence_transformers import SentenceTransformer
+        import chromadb
+        _RAG_MODEL = SentenceTransformer('BAAI/bge-small-zh-v1.5')
+        client = chromadb.PersistentClient(str(RAG_INDEX_DIR))
+        _RAG_COLLECTION = client.get_collection("secondbrain")
+    return _RAG_COLLECTION
+
+
+def rag_query(q, subject="", top_k=3):
+    """语义检索 SecondBrain 笔记。失败/无索引返回 []（静默降级，不影响主功能）"""
+    try:
+        collection = _rag_load()
+        if collection is None or _RAG_MODEL is None or not q:
+            return []
+        query_emb = _RAG_MODEL.encode(q).tolist()
+        where = {"subject": subject} if subject else None
+        results = collection.query(query_embeddings=[query_emb], n_results=max(1, min(top_k, 10)), where=where)
+        ids = results.get("ids", [[]])[0]
+        if not ids:
+            return []
+        items = []
+        for doc, meta, dist in zip(results["documents"][0], results["metadatas"][0], results["distances"][0]):
+            items.append({
+                "file": meta.get("file", "?"),
+                "source": meta.get("source", ""),
+                "subject": meta.get("subject", ""),
+                "header": meta.get("header", ""),
+                "score": round((1 - dist) * 100, 1),
+                "snippet": (doc or "")[:300],
+            })
+        return items
+    except Exception as e:
+        print(f"[rag] query failed: {e}", file=sys.stderr)
+        return []
 
 # 间隔复习列头 → 间隔天数（艾宾浩斯 1/2/4/7/15/30）
 TRACKER_INTERVALS = ((1, "①1天"), (2, "②2天"), (4, "③4天"), (7, "④7天"), (15, "⑤15天"), (30, "⑥30天"))
@@ -458,6 +513,7 @@ def build_system_prompt(context: dict, user_message: str = "") -> str:
 5. 电子技术（200分）每天必安排。高数薄弱时优先补高数。
 6. ⚠️ 【ACTION 纪律】调用 [ACTION:add_task] 前必须先扫描上方【未完成任务】列表，确认不存在标题相似的任务。如果已存在，说明情况并拒绝重复添加。宁可少加，不可多加。
 7. 每轮对话最多调用 1 次 [ACTION:add_task]，除非用户明确要求批量添加。
+8. 📚 【笔记引用纪律】涉及知识点讲解、概念解释、复习建议时，优先引用「SecondBrain 笔记检索」中的内容（它是用户笔记的语义检索结果，与用户记忆一致）；检索段不足时再用模型知识补充，并明确区分"你笔记里记的是..."与"补充说明..."。
 
 用户说：{user_message}"""
     return prompt
@@ -1289,6 +1345,19 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/secondbrain/state":
             self._sb_state_get()
 
+        elif parsed.path == "/rag/query":
+            params = dict(urllib.parse.parse_qsl(parsed.query))
+            q = params.get("q", "").strip()
+            if not q:
+                self.wfile.write(json.dumps({"error": "missing query param q"}).encode())
+                return
+            try:
+                top_k = max(1, min(int(params.get("top_k", "3")), 10))
+            except ValueError:
+                top_k = 3
+            items = rag_query(q, subject=params.get("subject", ""), top_k=top_k)
+            self.wfile.write(json.dumps({"items": items}, ensure_ascii=False).encode())
+
         else:
             # 未知路由明确报错（此前静默返回 {"ok":true}，导致前端拼错路由无感知）
             self.wfile.write(json.dumps({"error": "not found"}).encode())
@@ -1471,6 +1540,15 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             # 完整版硬核教练 prompt（含考纲/知识库/决策矩阵，合并自 deepseek_service.py）
             system_prompt = build_system_prompt(context, user_message)
 
+            # RAG：语义检索 SecondBrain 笔记，注入相关段落（失败静默降级）
+            rag_items = rag_query(user_message, top_k=3)
+            if rag_items:
+                rag_block = "\n\n【SecondBrain 笔记检索（语义相关，权威参考）】\n" + "\n".join(
+                    f"① 来源: {i['subject']}/{i['file']} 章节:{i['header']}（相似度{i['score']}%）\n{i['snippet']}"
+                    for i in rag_items
+                )
+                system_prompt = rag_block + "\n\n" + system_prompt
+
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
@@ -1522,6 +1600,19 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/secondbrain/state":
             data = json.loads(body)
             self._sb_state_post(data)
+
+        elif parsed.path == "/rag/query":
+            data = json.loads(body)
+            q = data.get("q", "").strip()
+            if not q:
+                self._respond({"error": "missing query q"})
+                return
+            try:
+                top_k = max(1, min(int(data.get("top_k", 3)), 10))
+            except (ValueError, TypeError):
+                top_k = 3
+            items = rag_query(q, subject=data.get("subject", ""), top_k=top_k)
+            self._respond({"items": items})
 
         else:
             # 未知路由明确报错，避免前端拼错路由静默成功
