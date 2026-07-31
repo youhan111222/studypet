@@ -18,6 +18,28 @@ export function ReviewPanel() {
 
   useEffect(() => { loadDueReviews(); }, []);
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (!showAnswer) {
+        if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
+          e.preventDefault();
+          setShowAnswer(true);
+        }
+      } else if (!rated) {
+        const idx = '1234'.indexOf(e.key);
+        if (idx >= 0) {
+          const rating = ([Rating.Again, Rating.Hard, Rating.Good, Rating.Easy] as const)[idx];
+          submitReviewRating(rating as Grade);
+          setRated(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showAnswer, rated, submitReviewRating]);
+
   if (reviewCards.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-[var(--text-muted)]">
@@ -66,9 +88,10 @@ export function ReviewPanel() {
               className="px-6 py-2 rounded-lg text-sm bg-[var(--accent)] text-[#fff]">
               显示答案
             </button>
+            <div className="text-xs mt-3 text-[var(--text-muted)]">快捷键：空格/Enter 显示答案</div>
           </div>
         ) : (
-          <div className="p-4 rounded-lg bg-[rgba(46,204,113,0.08)] border border-[rgba(46,204,113,0.2)]">
+          <div className="p-4 rounded-lg bg-[rgba(46,204,113,0.08)] border border-[rgba(46,204,113,0.2)] animate-[popIn_0.25s_ease-out]">
             <div className="text-xs mb-1 text-[var(--text-muted)]">正确答案</div>
             <div className="text-base font-bold mb-2 text-[#2ecc71]">{q.answer}</div>
             {q.analysis && <div className="text-xs leading-relaxed text-[var(--text-secondary)]">💡 {q.analysis}</div>}
@@ -82,13 +105,14 @@ export function ReviewPanel() {
           <div className="text-sm text-[var(--text-secondary)]">你的记忆程度：</div>
           {([Rating.Again, Rating.Hard, Rating.Good, Rating.Easy] as const).map(rating => (
             <button key={rating} onClick={async () => { await submitReviewRating(rating as Grade); setRated(true); }}
-              className="w-full p-3 rounded-lg text-left flex items-center justify-between transition-all bg-[var(--bg-card)] border border-[var(--border)]">
+              className="w-full p-3 rounded-lg text-left flex items-center justify-between transition-all bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-pop)]">
               <div>
                 <div className="text-sm font-bold" style={{ color: RATING_LABELS[rating].color }}>{RATING_LABELS[rating].label}</div>
                 <div className="text-xs text-[var(--text-muted)]">{RATING_LABELS[rating].desc}</div>
               </div>
             </button>
           ))}
+          <div className="text-xs text-[var(--text-muted)]">快捷键：1 完全忘了 · 2 很困难 · 3 正常 · 4 很简单</div>
         </div>
       )}
 

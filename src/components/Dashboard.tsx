@@ -37,28 +37,28 @@ export function Dashboard() {
   return (
     <div className="flex-1 overflow-auto p-6">
       {/* 顶部状态栏 */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6 animate-[fadeUp_0.4s_ease-out_both]" style={{ animationDelay: '100ms' }}>
         {[
           { label: '连续学习', value: `${streak}天`, icon: '🔥', color: '#ff8c00' },
           { label: '今日专注', value: `${Math.floor(todayStudyMin / 60)}h${todayStudyMin % 60}m`, icon: '⏱️', color: '#4ecca3' },
           { label: '待复习', value: `${dueCount}题`, icon: '📝', color: '#e74c3c' },
           { label: '本周完成', value: `${weekStats.tasksCompleted}项`, icon: '✅', color: '#0a84ff' },
         ].map(s => (
-          <div key={s.label} className="rounded-xl p-4 bg-[var(--bg-card)] border border-[var(--border)]">
+          <div key={s.label} className="rounded-xl p-4 bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)]">
             <div className="text-2xl mb-1">{s.icon}</div>
             <div className="text-xs text-[var(--text-muted)]">{s.label}</div>
-            <div className="text-xl font-bold" style={{ color: s.color }}>{s.value}</div>
+            <div className="text-2xl font-bold tabular-nums" style={{ color: s.color }}>{s.value}</div>
           </div>
         ))}
       </div>
 
       {/* 快速入口 */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6 animate-[fadeUp_0.4s_ease-out_both]" style={{ animationDelay: '200ms' }}>
         {SUBJECTS.map(s => (
           <button
             key={s.key}
             onClick={() => navigate(`/quiz/${s.key}`)}
-            className="rounded-xl p-5 text-left transition-all hover:scale-105 cursor-pointer bg-[var(--bg-card)] border border-[var(--border)]"
+            className="rounded-xl p-5 text-left transition-all hover:scale-105 cursor-pointer bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)]"
           >
             <div className="text-3xl mb-2">{s.icon}</div>
             <div className="text-sm font-bold" style={{ color: s.color }}>{s.name}</div>
@@ -71,7 +71,7 @@ export function Dashboard() {
       {dueCount > 0 && (
         <button
           onClick={() => navigate('/review')}
-          className="w-full rounded-xl p-4 mb-6 flex items-center gap-3 cursor-pointer transition-all hover:opacity-80 bg-[rgba(231,76,60,0.1)] border border-[rgba(231,76,60,0.3)]"
+          className="w-full rounded-xl p-4 mb-6 flex items-center gap-3 cursor-pointer transition-all hover:opacity-80 bg-[rgba(231,76,60,0.1)] border border-[rgba(231,76,60,0.3)] shadow-[var(--shadow-card)] animate-[fadeUp_0.4s_ease-out_both]" style={{ animationDelay: '250ms' }}
         >
           <span className="text-2xl">📝</span>
           <div className="flex-1 text-left">
@@ -83,8 +83,8 @@ export function Dashboard() {
       )}
 
       {/* 各科进度 */}
-      <div className="rounded-xl p-5 bg-[var(--bg-card)] border border-[var(--border)]">
-        <h3 className="text-sm font-bold mb-4 text-[var(--text-primary)]">各科进度</h3>
+      <div className="rounded-xl p-5 bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)] animate-[fadeUp_0.4s_ease-out_both]" style={{ animationDelay: '300ms' }}>
+        <h3 className="text-[15px] font-bold mb-4 tracking-[0.02em] text-[var(--text-primary)]">各科进度</h3>
         <div className="space-y-3">
           {SUBJECTS.map(s => (
             <SubjectProgressBar key={s.key} subject={s.key} color={s.color} />

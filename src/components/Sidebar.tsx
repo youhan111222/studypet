@@ -50,7 +50,7 @@ export function Sidebar() {
     <div className="w-[160px] min-w-[160px] h-screen bg-[var(--bg-tertiary)] border-r border-[var(--border)] flex flex-col p-[16px_12px] gap-[12px] overflow-hidden">
       {/* Logo + 状态 */}
       <div className="text-center">
-        <div className="w-[56px] h-[56px] mx-auto rounded-[50%] bg-[linear-gradient(135deg,_#4ecca3,_#0a84ff)] flex items-center justify-center text-[28px]">📚</div>
+        <div className="w-[56px] h-[56px] mx-auto rounded-[50%] bg-[linear-gradient(135deg,_#4ecca3,_#0a84ff)] flex items-center justify-center text-[28px] transition-all duration-300 hover:shadow-[var(--glow-accent)]">📚</div>
         <div className="text-[14px] font-bold mt-[6px]">StudyPet</div>
         <div className="text-[11px] text-[var(--text-secondary)] mt-[2px]">
           专升本备考助手
@@ -70,7 +70,7 @@ export function Sidebar() {
           { icon: '⏱️', label: '今日', value: `${Math.floor(todayStudyMin/60)}h${todayStudyMin%60}m`, color: '#4ecca3' },
           { icon: '📝', label: '待复习', value: `${dueCount}题`, color: dueCount > 0 ? '#e74c3c' : '#2ecc71' },
         ].map(item => (
-          <div key={item.label} className="flex items-center gap-[8px] p-[6px_8px] rounded-[6px] bg-[var(--bg-card)]">
+          <div key={item.label} className="flex items-center gap-[8px] p-[6px_8px] rounded-[6px] bg-[var(--bg-card)] shadow-[var(--shadow-card)] transition-all duration-200 hover:bg-[#20263d] hover:-translate-y-[1px]">
             <span className="text-[14px]">{item.icon}</span>
             <div>
               <div className="text-[10px] text-[var(--text-muted)]">{item.label}</div>
@@ -84,8 +84,8 @@ export function Sidebar() {
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="flex flex-col gap-[4px]">
           {navItems.map(v => (
-            <button key={v.id} onClick={() => navigate(v.path)} className="p-[7px_12px] rounded-[6px] text-left text-[12px] font-medium cursor-pointer" style={{
-              background: isActive(v.path) ? 'var(--bg-card)' : 'transparent',
+            <button key={v.id} onClick={() => navigate(v.path)} className="p-[7px_12px] rounded-[6px] text-left text-[12px] font-medium cursor-pointer transition-all hover:bg-[#20263d]" style={{
+              background: isActive(v.path) ? 'var(--accent-dim)' : undefined,
               color: isActive(v.path) ? 'var(--accent)' : 'var(--text-secondary)',
               border: isActive(v.path) ? '1px solid var(--accent)' : '1px solid transparent',
             }}>

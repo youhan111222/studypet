@@ -24,6 +24,67 @@ export function QuizPanel() {
     if (subject) loadQuestions(subject as SubjectKey);
   }, [subject]);
 
+  const advance = async () => {
+    // Save error tags to the attempt before moving on
+    if (lastAttempt && !lastAttempt.isCorrect && selectedTags.length > 0) {
+      await updateAttemptTags(lastAttempt.id, selectedTags);
+    }
+    setSelectedTags([]);
+    setSelectedMulti([]);
+    setPendingSelf(false);
+    if (currentIndex >= questions.length - 1) {
+      await syncSubjectProgress(subject as SubjectKey);
+      setQuizDone(true);
+    }
+    else nextQuestion();
+  };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      const q = questions[currentIndex];
+      if (!q) return;
+
+      const key = e.key;
+      if (!showResult) {
+        if (q.type === 'truefalse') {
+          if (key === '1' || key === 'J' || key === 'j') selectAnswer('对');
+          else if (key === '2' || key === 'K' || key === 'k') selectAnswer('错');
+        } else if (q.options) {
+          const idx = 'abcd'.indexOf(key.toLowerCase());
+          if (idx >= 0) {
+            const letter = String.fromCharCode(65 + idx);
+            if (q.type === 'multiple') {
+              const next = selectedMulti.includes(letter)
+                ? selectedMulti.filter(l => l !== letter)
+                : [...selectedMulti, letter];
+              setSelectedMulti(next);
+              selectAnswer([...next].sort().join(''));
+            } else {
+              selectAnswer(letter);
+            }
+          }
+        }
+      }
+
+      if (key === 'Enter') {
+        if (!showResult) {
+          if (q.type === 'essay') {
+            if (!pendingSelf && selectedAnswer.trim()) setPendingSelf(true);
+          } else if (selectedAnswer) {
+            submitAnswer(selectedTags);
+          }
+        } else {
+          advance();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [questions, currentIndex, showResult, selectedAnswer, selectedMulti, selectedTags, pendingSelf, lastAttempt, subject, advance, selectAnswer, submitAnswer, nextQuestion, updateAttemptTags, syncSubjectProgress]);
+
   if (questions.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-[var(--text-muted)]">
@@ -112,9 +173,9 @@ export function QuizPanel() {
                 key={v}
                 onClick={() => !showResult && selectAnswer(v)}
                 disabled={showResult}
-                className={`flex-1 p-3 rounded-lg transition-all text-sm font-bold ${
+                className={`flex-1 p-3 rounded-lg transition-all text-sm font-bold shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-pop)] ${
                   selectedAnswer === v
-                    ? 'bg-[rgba(10,132,255,0.1)] border border-[var(--accent)]'
+                    ? 'bg-[rgba(10,132,255,0.18)] border border-[var(--accent)] shadow-[var(--glow-accent)]'
                     : 'bg-[var(--bg-secondary)] border border-[var(--border)]'
                 } text-[var(--text-primary)] ${showResult ? 'cursor-default' : 'cursor-pointer'}`}
               >
@@ -151,10 +212,10 @@ export function QuizPanel() {
                   key={i}
                   onClick={toggleOption}
                   disabled={showResult}
-                  className={`w-full text-left p-3 rounded-lg transition-all text-sm ${
+                  className={`w-full text-left p-3 rounded-lg transition-all text-sm shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-pop)] ${
                     isCorrectAnswer ? 'bg-[rgba(46,204,113,0.15)] border border-[rgba(46,204,113,0.4)]'
                       : isWrongSelected ? 'bg-[rgba(231,76,60,0.15)] border border-[rgba(231,76,60,0.4)]'
-                      : isSelected ? 'bg-[rgba(10,132,255,0.1)] border border-[var(--accent)]'
+                      : isSelected ? 'bg-[rgba(10,132,255,0.18)] border border-[var(--accent)] shadow-[var(--glow-accent)]'
                       : 'bg-[var(--bg-secondary)] border border-[var(--border)]'
                   } text-[var(--text-primary)] ${showResult ? 'cursor-default' : 'cursor-pointer'}`}
                 >
@@ -191,7 +252,7 @@ export function QuizPanel() {
 
         {/* 结果展示 */}
         {showResult && (
-          <div className={`mt-4 p-4 rounded-lg ${
+          <div className={`mt-4 p-4 rounded-lg animate-[popIn_0.25s_ease-out] ${
             lastAttempt?.isCorrect
               ? 'bg-[rgba(46,204,113,0.08)] border border-[rgba(46,204,113,0.2)]'
               : 'bg-[rgba(231,76,60,0.08)] border border-[rgba(231,76,60,0.2)]'
@@ -251,35 +312,25 @@ export function QuizPanel() {
               </div>
             ) : (
               <button onClick={() => setPendingSelf(true)} disabled={!selectedAnswer.trim()}
-                className="px-8 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-30 bg-[var(--accent)] text-[#fff]">
+                className="px-8 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-30 bg-[var(--accent)] text-[#fff] shadow-[var(--glow-accent)]">
                 提交答案
               </button>
             )
           ) : (
             <button onClick={() => submitAnswer(selectedTags)} disabled={!selectedAnswer}
-              className="px-8 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-30 bg-[var(--accent)] text-[#fff]">
+              className="px-8 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-30 bg-[var(--accent)] text-[#fff] shadow-[var(--glow-accent)]">
               提交答案
             </button>
           )
         ) : (
-          <button onClick={async () => {
-            // Save error tags to the attempt before moving on
-            if (lastAttempt && !lastAttempt.isCorrect && selectedTags.length > 0) {
-              await updateAttemptTags(lastAttempt.id, selectedTags);
-            }
-            setSelectedTags([]);
-            setSelectedMulti([]);
-            setPendingSelf(false);
-            if (currentIndex >= questions.length - 1) {
-              await syncSubjectProgress(subject as SubjectKey);
-              setQuizDone(true);
-            }
-            else nextQuestion();
-          }}
+          <button onClick={advance}
             className="px-8 py-3 rounded-xl text-sm font-bold transition-all bg-[var(--accent)] text-[#fff]">
             {currentIndex >= questions.length - 1 ? '查看结果' : '下一题 →'}
           </button>
         )}
+      </div>
+      <div className="text-center mt-3 text-xs text-[var(--text-muted)]">
+        快捷键：A-D 选择 · Enter 提交/下一题
       </div>
     </div>
   );

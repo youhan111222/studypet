@@ -144,7 +144,7 @@ export function StudyTimer() {
         const totalMin = subjectProgress[subj].totalMinutes;
 
         return (
-          <div key={subj} className="flex items-center gap-[6px] p-[4px_10px] rounded-[14px] cursor-pointer select-none transition-[all_0.15s]"
+          <div key={subj} className={`flex items-center gap-[6px] p-[4px_10px] rounded-[14px] cursor-pointer select-none transition-[all_0.15s] hover:-translate-y-[1px] hover:shadow-[var(--shadow-card)]${isActive && !isPaused ? ' animate-[pulseGlow_2.5s_ease-in-out_infinite]' : ''}`}
             style={{
               background: isActive ? `${meta.color}20` : 'var(--bg-card)',
               border: isActive ? `1px solid ${meta.color}` : '1px solid var(--border)',
@@ -209,7 +209,7 @@ export function StudyTimer() {
 
       {/* Toast 提示 */}
       {quickStartToast && (
-        <div className="absolute top-[100%] left-[50%] -translate-x-[50%] mt-[8px] p-[8px_16px] rounded-[12px] bg-[var(--bg-tertiary)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.3)] z-[200] flex items-center gap-[8px] text-[12px] whitespace-nowrap">
+        <div className="absolute top-[100%] left-[50%] -translate-x-[50%] mt-[8px] p-[8px_16px] rounded-[12px] bg-[var(--bg-tertiary)] border border-[var(--border)] shadow-[var(--shadow-pop)] z-[200] flex items-center gap-[8px] text-[12px] whitespace-nowrap">
           <span>{quickStartToast}</span>
           {quickStartToast.includes('5 分钟') && (
             <>

@@ -56,16 +56,16 @@ export function StatsPanel() {
           { label: '总答题量', value: totalAttempts, unit: '次', color: '#4ecca3' },
           { label: '总正确率', value: `${overallRate}`, unit: '%', color: overallRate > 70 ? '#2ecc71' : '#f39c12' },
         ].map(s => (
-          <div key={s.label} className="rounded-xl p-4 text-center bg-[var(--bg-card)] border border-[var(--border)]">
-            <div className="text-2xl font-bold" style={{ color: s.color }}>{s.value}<span className="text-sm">{s.unit}</span></div>
-            <div className="text-xs mt-1 text-[var(--text-muted)]">{s.label}</div>
+          <div key={s.label} className="rounded-xl p-4 text-center bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)]">
+            <div className="text-3xl font-bold tabular-nums" style={{ color: s.color }}>{s.value}<span className="text-sm">{s.unit}</span></div>
+            <div className="text-xs mt-1 tracking-[0.05em] text-[var(--text-muted)]">{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* 各科正确率 */}
-      <div className="rounded-xl p-5 mb-4 bg-[var(--bg-card)] border border-[var(--border)]">
-        <h3 className="text-sm font-bold mb-4 text-[var(--text-primary)]">各科正确率</h3>
+      <div className="rounded-xl p-5 mb-4 bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)]">
+        <h3 className="text-[15px] font-bold mb-4 tracking-[0.02em] text-[var(--text-primary)]">各科正确率</h3>
         <div className="space-y-4">
           {SUBJECTS.map(s => {
             const data = stats[s.key];
@@ -74,7 +74,7 @@ export function StatsPanel() {
               <div key={s.key}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm text-[var(--text-secondary)]">{s.name}</span>
-                  <span className="text-sm font-bold" style={{ color: s.color }}>{rate}%</span>
+                  <span className="text-sm font-bold tabular-nums" style={{ color: s.color }}>{rate}%</span>
                 </div>
                 <div className="h-2 rounded-full overflow-hidden bg-[var(--bg-tertiary)]">
                   <div className="h-full rounded-full transition-all" style={{ width: `${rate}%`, background: s.color }} />
@@ -91,10 +91,22 @@ export function StatsPanel() {
       {/* 章节详情 */}
       {SUBJECTS.map(s => {
         const data = stats[s.key];
-        if (!data || Object.keys(data.byChapter).length === 0) return null;
+        if (!data) return null;
+        const chapters = Object.keys(data.byChapter);
+        if (chapters.length === 0) {
+          return (
+            <div key={s.key} className="rounded-xl p-5 mb-4 bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)]">
+              <h4 className="text-sm font-bold mb-3 tracking-[0.02em]" style={{ color: s.color }}>{s.name} · 章节详情</h4>
+              <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                <span>📭</span>
+                <span>暂无章节数据，完成几次刷题后这里会展示各章节正确率</span>
+              </div>
+            </div>
+          );
+        }
         return (
-          <div key={s.key} className="rounded-xl p-5 mb-4 bg-[var(--bg-card)] border border-[var(--border)]">
-            <h4 className="text-sm font-bold mb-3" style={{ color: s.color }}>{s.name} · 章节详情</h4>
+          <div key={s.key} className="rounded-xl p-5 mb-4 bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)]">
+            <h4 className="text-sm font-bold mb-3 tracking-[0.02em]" style={{ color: s.color }}>{s.name} · 章节详情</h4>
             <div className="space-y-2">
               {Object.entries(data.byChapter).map(([ch, d]: [string, any]) => (
                 <div key={ch} className="flex items-center justify-between text-xs">
