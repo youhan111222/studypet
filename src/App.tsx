@@ -11,11 +11,11 @@ import { ReviewPanel } from './components/ReviewPanel';
 import { StatsPanel } from './components/StatsPanel';
 import { TaskList } from './components/TaskList';
 import { SchedulePanel } from './components/SchedulePanel';
-import { ActivityTracker } from './components/ActivityTracker';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
 import { AchievementWall } from './components/AchievementWall';
 import { ImportantPanel } from './components/ImportantPanel';
 import { ScreenTimePanel } from './components/ScreenTimePanel';
+import { ReminderHost } from './hooks/useReminders';
 import { API } from './config';
 
 export default function App() {
@@ -75,6 +75,8 @@ export default function App() {
           (data.apps || []).filter((a: any) => a.category === 'study').reduce((s: number, a: any) => s + a.duration, 0)
         );
         updateWeekStats({ focusHours: studyMinutes / 60 });
+        // 学习时长纳入连胜判定（每天 ≥30 分钟有效学习也算打卡）
+        useStore.getState().recordStudyMinutes(today, studyMinutes);
       }
     } catch {
       if (trackerStatusRef.current === 'online') setTrackerStatus('offline');
@@ -115,6 +117,7 @@ export default function App() {
           </div>
         )}
 
+        <ReminderHost />
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/quiz/:subject" element={<QuizPanel />} />
@@ -122,7 +125,6 @@ export default function App() {
           <Route path="/stats" element={<StatsPanel />} />
           <Route path="/tasks" element={<TaskList />} />
           <Route path="/schedule" element={<SchedulePanel />} />
-          <Route path="/tracking" element={<ActivityTracker />} />
           <Route path="/analytics" element={<AnalyticsPanel />} />
           <Route path="/achievements" element={<AchievementWall />} />
           <Route path="/important" element={<ImportantPanel />} />

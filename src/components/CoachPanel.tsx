@@ -751,7 +751,6 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
             <span className="text-[13px] font-semibold">AI 教练</span>
             <span className="text-[10px] font-bold ml-[6px] px-[6px] py-[2px] rounded bg-[linear-gradient(135deg,rgba(78,204,163,0.2),rgba(10,132,255,0.2))] text-[var(--accent)]">V7</span>
           </div>
-          <span className="text-[10px] text-[var(--accent)]">● DeepSeek R1</span>
         </div>
         <div className="flex items-center gap-1">
           {/* Voice toggle */}

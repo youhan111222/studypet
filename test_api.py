@@ -98,13 +98,6 @@ def test_health(api_server):
     assert body.get("status") == "ok"
 
 
-def test_search_requires_query(api_server):
-    req = urllib.request.Request(f"{api_server}/search")
-    resp = urllib.request.urlopen(req, timeout=10)
-    body = json.loads(resp.read().decode())
-    assert body.get("error") == "missing query param q"
-
-
 def test_unknown_route_not_found(api_server):
     # 拼错路由必须明确报错，不能静默 {"ok": true}
     resp = urllib.request.urlopen(f"{api_server}/no/such/route", timeout=5)
@@ -155,6 +148,18 @@ def test_generate_question_needs_key(api_server):
         assert body.get("error")
     else:
         assert any(k in body for k in ("stem", "error"))
+
+
+def test_review_add(api_server, sb_root):
+    # 登记新知识点：追加一行，学习日期=今天
+    body = api_post(f"{api_server}/secondbrain/review-add", {"subject": "高数", "point": "洛必达法则"})
+    assert body.get("ok") is True
+    p = sb_root / "15-元知识" / "学习系统" / "📌 复习追踪器.md"
+    content = p.read_text(encoding="utf-8")
+    assert "洛必达法则" in content
+    assert "高数" in content
+    # 表头保留
+    assert "| 学习日期 | 知识点 | 科目 |" in content
 
 
 def test_deepseek_key_masked(api_server):

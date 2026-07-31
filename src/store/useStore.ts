@@ -7,6 +7,7 @@ import type { Task, Pet, Achievement, ChatMessage, ChatSession, WeekStats, Sched
 interface Store {
   tasks: Task[]; pet: Pet; achievements: Achievement[]; sessions: ChatSession[]; activeSessionDate: string;
   weekStats: WeekStats; streak: number;
+  studyDays: Record<string, number>;
   coachOpen: boolean; addTaskOpen: boolean; schedule: ScheduleItem[]; activityLogs: ActivityLog[]; autoPlan: boolean;
   importantItems: ImportantItem[];
   subjectProgress: Record<SubjectKey, SubjectProgress>;
@@ -19,6 +20,8 @@ interface Store {
   importSchedule: (items: ScheduleItem[]) => void; clearSchedule: () => void;
   toggleAutoPlan: () => void;
   syncActivityLogs: (logs: ActivityLog[]) => void;
+  /** 记录某天的学习时长（分钟），供 streak 打卡判定（≥30 分钟算打卡） */
+  recordStudyMinutes: (date: string, minutes: number) => void;
   addImportant: (item: ImportantItem) => void; toggleImportant: (id: string) => void; deleteImportant: (id: string) => void;
   updateSubjectProgress: (subject: SubjectKey, updates: Partial<SubjectProgress>) => void;
   updateChapterMastery: (subject: SubjectKey, chapter: string, mastery: MasteryLevel) => void;
@@ -64,14 +67,8 @@ export const ACHIEVEMENT_DEFS: Record<string, AchievementDef> = {
       const current = state.achievements.find(a => a.id === 'a3')?.progress || 0;
       return Math.max(current, hour < 7 ? 1 : 0);
     }},
-  a4: { id: 'a4', icon: '🏆', title: '全勤月', desc: '本月每天都有学习', total: 30,
-    onStateTick: ({ state, streak }) => {
-      const month = new Date().toISOString().slice(0, 7);
-      const studyDaysThisMonth = new Set(
-        state.activityLogs.filter(l => l.date.startsWith(month) && l.category === 'study').map(l => l.date)
-      );
-      return Math.min(30, studyDaysThisMonth.size);
-    }},
+  a4: { id: 'a4', icon: '🏆', title: '坚持一周', desc: '连续7天打卡', total: 7,
+    onStateTick: ({ streak }) => streak },
   a5: { id: 'a5', icon: '📚', title: '学海无涯', desc: '累计专注100小时', total: 100,
     onTaskComplete: ({ task, state }) => {
       const currentHours = state.achievements.find(a => a.id === 'a5')?.progress || 0;
@@ -118,6 +115,32 @@ function computeStateAchievements(state: Store, streak: number): Achievement[] {
   });
 }
 
+// ====== 连胜计算（公共）======
+// 某天算"打卡" = 该天有完成任务 **或** 该天学习时长 ≥ 30 分钟（studyDays）
+// 从今天往回数连续打卡的天数，每天最多 +1
+function computeStreak(tasks: Task[], studyDays: Record<string, number>, today: string): number {
+  const checkinDates = new Set<string>();
+  tasks.forEach(t => {
+    if (t.completed) checkinDates.add(t.date || today);
+  });
+  Object.entries(studyDays).forEach(([date, minutes]) => {
+    if (minutes >= 30) checkinDates.add(date);
+  });
+  let streak = 0;
+  const now = new Date();
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    if (checkinDates.has(dateStr)) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 const defaultSchedule: ScheduleItem[] = [];
 
 const defaultLogs: ActivityLog[] = []; // 初始为空，由 tracker 填充
@@ -156,6 +179,7 @@ export const useStore = create<Store>()(
       activeSessionDate: new Date().toISOString().slice(0, 10),
       weekStats: { focusHours: 0, tasksCompleted: 0, pomodoroCount: 0, tasksSkipped: 0 },
       streak: 0,
+      studyDays: {},
       coachOpen: false,
       addTaskOpen: false,
       schedule: defaultSchedule,
@@ -234,28 +258,8 @@ export const useStore = create<Store>()(
           updates.achievements = achievements;
         }
         
-        // 5. 连胜计算（基于日期维度全量重算，每天最多+1）
-        // 收集所有完成任务的日期集合
-        const completedDates = new Set<string>();
-        tasks.forEach(t => {
-          if (t.completed) {
-            // 用任务自身的 date 字段，如果没有则用今天的日期
-            completedDates.add(t.date || today);
-          }
-        });
-        // 从今天往回数连续有完成的天数
-        let streak = 0;
-        const now = new Date();
-        for (let i = 0; i < 365; i++) {
-          const d = new Date(now);
-          d.setDate(d.getDate() - i);
-          const dateStr = d.toISOString().slice(0, 10);
-          if (completedDates.has(dateStr)) {
-            streak++;
-          } else {
-            break;
-          }
-        }
+        // 5. 连胜计算（基于日期维度全量重算，每天最多+1；完成任务 或 学习≥30分钟 都算打卡）
+        const streak = computeStreak(tasks, state.studyDays, today);
         updates.streak = streak;
         
         // 6. 更新基于全局状态的成就（如 streak、level）
@@ -318,6 +322,17 @@ export const useStore = create<Store>()(
         const byId = new Map(state.activityLogs.map(l => [l.id, l]));
         for (const l of logs) byId.set(l.id, l);
         return { activityLogs: Array.from(byId.values()) };
+      }),
+      recordStudyMinutes: (date, minutes) => set(state => {
+        // 保存最大值：/activity/stats 的 effectiveStudyMinutes 是当日累计值，不能累加
+        if (minutes <= (state.studyDays[date] || 0)) return {};
+        const studyDays = { ...state.studyDays, [date]: minutes };
+        const updates: Partial<Store> = { studyDays };
+        // 学习时长 ≥30 分钟的天也计入打卡，重算连胜 + 状态类成就
+        const streak = computeStreak(state.tasks, studyDays, date);
+        updates.streak = streak;
+        updates.achievements = computeStateAchievements({ ...state, ...updates }, streak);
+        return updates;
       }),
       toggleAutoPlan: () => set(state => ({ autoPlan: !state.autoPlan })),
       addImportant: (item) => set(state => ({ importantItems: [...state.importantItems, item] })),
@@ -485,6 +500,9 @@ export const useStore = create<Store>()(
           pet: state.pet,
           achievements: state.achievements,
           streak: state.streak,
+          studyDays: Object.fromEntries(
+            Object.entries(state.studyDays).filter(([date]) => date >= cutoff30)
+          ),
           weekStats: state.weekStats,
           schedule: state.schedule,
           autoPlan: state.autoPlan,
@@ -507,6 +525,7 @@ export const useStore = create<Store>()(
             pet: p.pet ?? current.pet,
             achievements: p.achievements ?? current.achievements,
             streak: p.streak ?? current.streak,
+            studyDays: p.studyDays ?? current.studyDays,
             weekStats: p.weekStats ?? current.weekStats,
             schedule: p.schedule ?? current.schedule,
             autoPlan: p.autoPlan ?? current.autoPlan,
@@ -533,6 +552,7 @@ export const useStore = create<Store>()(
                   pet: p.pet ?? current.pet,
                   achievements: p.achievements ?? current.achievements,
                   streak: p.streak ?? current.streak,
+                  studyDays: p.studyDays ?? current.studyDays,
                   weekStats: p.weekStats ?? current.weekStats,
                   schedule: p.schedule ?? current.schedule,
                   autoPlan: p.autoPlan ?? current.autoPlan,

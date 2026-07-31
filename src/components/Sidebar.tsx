@@ -16,6 +16,7 @@ const navItems = [
   { id: 'review', path: '/review', label: '错题复习', icon: '🔄' },
   { id: 'stats', path: '/stats', label: '统计', icon: '📊' },
   { id: 'schedule', path: '/schedule', label: '课程表', icon: '📅' },
+  { id: 'tasks', path: '/tasks', label: '任务', icon: '✅' },
   { id: 'analytics', path: '/analytics', label: '深度分析', icon: '🔍' },
   { id: 'achievements', path: '/achievements', label: '成就墙', icon: '🏆' },
   { id: 'important', path: '/important', label: '重要事项', icon: '⭐' },

@@ -15,11 +15,32 @@ export function QuizPanel() {
   const navigate = useNavigate();
   const { questions, currentIndex, selectedAnswer, showResult, lastAttempt,
           correctCount, wrongCount,
-          loadQuestions, selectAnswer, submitAnswer, nextQuestion, updateAttemptTags } = useQuizStore();
+          loadQuestions, selectAnswer, submitAnswer, nextQuestion, updateAttemptTags, generateQuestion } = useQuizStore();
   const [selectedTags, setSelectedTags] = useState<ErrorTag[]>([]);
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [pendingSelf, setPendingSelf] = useState(false);
   const [quizDone, setQuizDone] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const handleAiGenerate = async () => {
+    if (!subject || aiLoading) return;
+    setAiLoading(true);
+    try {
+      const q = await generateQuestion(subject as SubjectKey, '', '');
+      if (q) {
+        useQuizStore.setState(s => ({ questions: [q, ...s.questions], currentIndex: 0, showResult: false, selectedAnswer: '' }));
+        setSelectedTags([]);
+        setSelectedMulti([]);
+        setPendingSelf(false);
+      } else {
+        alert('AI 出题失败，请重试');
+      }
+    } catch {
+      alert('AI 出题失败，请重试');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (subject) {
@@ -143,9 +164,15 @@ export function QuizPanel() {
         <button onClick={() => navigate('/')} className="text-sm text-[var(--text-muted)]">
           ← {SUBJECT_NAMES[subject || ''] || subject}
         </button>
-        <span className="text-sm px-3 py-1 rounded-full bg-[var(--bg-card)] text-[var(--text-secondary)]">
-          {currentIndex + 1} / {questions.length}
-        </span>
+        <div className="flex items-center gap-3">
+          <button onClick={handleAiGenerate} disabled={aiLoading}
+            className="text-sm px-3 py-1 rounded-full bg-[var(--accent-dim)] text-[var(--accent)] border border-[var(--accent)] disabled:opacity-30">
+            {aiLoading ? '生成中...' : '✨ AI 出题'}
+          </button>
+          <span className="text-sm px-3 py-1 rounded-full bg-[var(--bg-card)] text-[var(--text-secondary)]">
+            {currentIndex + 1} / {questions.length}
+          </span>
+        </div>
       </div>
 
       {/* 进度条 */}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useQuizStore, syncSubjectProgress } from '../store/quizStore';
 import { useNavigate } from 'react-router-dom';
@@ -37,14 +37,40 @@ export function Dashboard() {
 
   // SecondBrain 今日待复习
   const [reviewDue, setReviewDue] = useState<ReviewDueItem[]>([]);
-  useEffect(() => {
-    fetchReviewDue().then(items => setReviewDue(items));
+  const loadReviewDue = useCallback(async () => {
+    const items = await fetchReviewDue();
+    setReviewDue(items);
   }, []);
+  useEffect(() => { loadReviewDue(); }, [loadReviewDue]);
 
   // 勾选完成一次复习 → 成功后本地移除
   const handleReviewCheck = async (item: ReviewDueItem) => {
     const ok = await checkReview(item.id, item.subject, item.point);
     if (ok) setReviewDue(prev => prev.filter(it => it.id !== item.id));
+  };
+
+  // 登记知识点 → SecondBrain 间隔复习（POST /secondbrain/review-add，学习日期=今天）
+  const handleAddKnowledgePoint = async () => {
+    const subject = window.prompt('请输入科目（电子/高数/英语/政治）', '');
+    if (!subject || !subject.trim()) return;
+    const point = window.prompt('请输入知识点名称', '');
+    if (!point || !point.trim()) return;
+    try {
+      const res = await fetch('/secondbrain/review-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: subject.trim(), point: point.trim() }),
+      });
+      const data = await res.json();
+      if (data?.ok !== true) {
+        alert('登记失败（SecondBrain 服务不可用）');
+        return;
+      }
+      alert('✅ 已登记，今天起 1/2/4/7/15/30 天间隔复习');
+      loadReviewDue();
+    } catch {
+      alert('登记失败（SecondBrain 服务不可用）');
+    }
   };
 
   // 收工日记：统计 + 待复习摘要 → SecondBrain 日记
@@ -116,6 +142,16 @@ export function Dashboard() {
             <div className={`text-2xl font-bold tabular-nums ${colorClass[s.color]}`}>{s.value}</div>
           </div>
         ))}
+      </div>
+
+      {/* 登记知识点（SecondBrain 间隔复习入口，常驻显示） */}
+      <div className="flex justify-end mb-3 animate-[fadeUp_0.4s_ease-out_both]" style={{ animationDelay: '140ms' }}>
+        <button
+          onClick={handleAddKnowledgePoint}
+          className="rounded-xl px-3 py-[7px] text-xs font-medium transition-all hover:scale-105 cursor-pointer bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)] text-[var(--text-secondary)]"
+        >
+          ➕ 登记知识点
+        </button>
       </div>
 
       {/* SecondBrain 今日待复习（有数据才显示） */}

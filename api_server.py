@@ -20,6 +20,7 @@ PATINA_DB = os.path.join(os.environ.get("APPDATA", ""), "Patina", "patina.db")
 # 根目录可用环境变量 SECOND_BRAIN_ROOT 覆盖（测试用临时目录，不碰真实文件）
 SECOND_BRAIN_ROOT = os.environ.get("SECOND_BRAIN_ROOT", r"D:\SecondBrain")
 TRACKER_PATH = os.path.join(SECOND_BRAIN_ROOT, r"15-元知识\学习系统\📌 复习追踪器.md")
+TRACKER_HEADER = "# 📌 复习追踪器\n\n> 间隔复习：1/2/4/7/15/30 天。学习新知识点当天登记，到间隔日勾选 ✅。\n> 维护：StudyPet（/secondbrain/review-check）或手动。格式勿改（后端解析依赖）。\n\n| 学习日期 | 知识点 | 科目 | ①1天 | ②2天 | ③4天 | ④7天 | ⑤15天 | ⑥30天 |\n|----------|--------|------|------|------|------|------|-------|-------|\n"
 MISTAKES_DIR = os.path.join(SECOND_BRAIN_ROOT, "10-知识库")
 DIARY_DIR = os.path.join(SECOND_BRAIN_ROOT, "20-日记")
 STATE_PATH = os.path.join(SECOND_BRAIN_ROOT, "memory-bank", "claude-code-memory", "learning-state.md")
@@ -77,6 +78,115 @@ def rag_query(q, subject="", top_k=3):
     except Exception as e:
         print(f"[rag] query failed: {e}", file=sys.stderr)
         return []
+
+
+# ===== 官方课表 XLS 导入 =====
+OFFICIAL_SCHEDULE_XLS = r"C:\Users\20397\Desktop\学生个人课表_202430000863.xls"
+
+# 节次 -> (开始, 结束) 分钟（按课表大节时段）
+_XLS_PERIOD_SLOTS = {
+    1: (500, 595), 2: (500, 595),      # 08:20-09:55
+    3: (610, 705), 4: (610, 705),      # 10:10-11:45
+    5: (860, 955), 6: (860, 955),      # 14:20-15:55
+    7: (965, 1060), 8: (965, 1060),    # 16:05-17:40
+    9: (1100, 1195), 10: (1100, 1195), # 18:20-19:55
+    11: (1200, 1295), 12: (1200, 1295),# 20:00-21:35
+}
+
+
+def _xls_parse_cell(cell_text, fallback_start, fallback_end):
+    """解析课程单元格 -> [{name, teacher, weeks, location, start, end}]"""
+    courses = []
+    lines = [ln.strip() for ln in (cell_text or "").split("\n") if ln.strip()]
+    cur = None
+    for ln in lines:
+        if cur is None:
+            cur = {"name": ln, "teacher": "", "weeks": "", "location": ""}
+            continue
+        if "节" in ln and ln.startswith("[") and ln.endswith("节"):
+            nums = re.findall(r"\d+", ln)
+            if nums:
+                start = _XLS_PERIOD_SLOTS.get(min(nums), (fallback_start, fallback_start))[0]
+                end = _XLS_PERIOD_SLOTS.get(max(nums), (fallback_end, fallback_end))[1]
+            else:
+                start, end = fallback_start, fallback_end
+            courses.append({**cur, "start": start, "end": end})
+            cur = None
+        elif "周]" in ln:
+            cur["weeks"] = ln
+        elif not cur["teacher"]:
+            cur["teacher"] = ln
+        else:
+            cur["location"] = ln
+    return courses
+
+
+def parse_official_schedule_xls():
+    """解析桌面官方课表 XLS → ScheduleItem[]（day 1=周一..7=周日）。失败返回 []"""
+    if not os.path.exists(OFFICIAL_SCHEDULE_XLS):
+        return []
+    try:
+        import xlrd
+        book = xlrd.open_workbook(OFFICIAL_SCHEDULE_XLS, formatting_info=False)
+        sh = book.sheet_by_index(0)
+        rows = []
+        for r in range(sh.nrows):
+            row = []
+            for c in range(sh.ncols):
+                v = sh.cell_value(r, c)
+                row.append("" if v in ("", None) else str(v))
+            rows.append(row)
+    except Exception as e:
+        print(f"[schedule] XLS 解析失败: {e}", file=sys.stderr)
+        return []
+
+    header_row = None
+    for i, row in enumerate(rows):
+        if any("星期" in v for v in row):
+            header_row = i
+            break
+    if header_row is None:
+        return []
+
+    time_rows = []
+    for i in range(header_row + 1, len(rows)):
+        m = re.search(r"(\d{2}:\d{2})-(\d{2}:\d{2})", rows[i][0])
+        if not m:
+            continue
+        sh, sm = map(int, m.group(1).split(":"))
+        eh, em = map(int, m.group(2).split(":"))
+        time_rows.append((rows[i], sh * 60 + sm, eh * 60 + em))
+    if not time_rows:
+        return []
+
+    items = []
+    rid = 0
+    for day_idx in range(7):  # 列 1..7 = 周一..周日
+        for row, start, end in time_rows:
+            cell = row[day_idx + 1].strip() if day_idx + 1 < len(row) else ""
+            if not cell or cell == " ":
+                continue
+            for c in _xls_parse_cell(cell, start, end):
+                rid += 1
+                items.append({
+                    "id": f"xls-{rid}",
+                    "name": c["name"],
+                    "day": day_idx + 1,
+                    "timeStart": f"{c['start'] // 60:02d}:{c['start'] % 60:02d}",
+                    "timeEnd": f"{c['end'] // 60:02d}:{c['end'] % 60:02d}",
+                    "location": c["location"],
+                    "teacher": c["teacher"],
+                    "weeks": c["weeks"] or "1-17",
+                })
+    seen = set()
+    dedup = []
+    for it in items:
+        sig = (it["name"], it["day"], it["timeStart"], it["timeEnd"], it["location"])
+        if sig in seen:
+            continue
+        seen.add(sig)
+        dedup.append(it)
+    return dedup
 
 # 间隔复习列头 → 间隔天数（艾宾浩斯 1/2/4/7/15/30）
 TRACKER_INTERVALS = ((1, "①1天"), (2, "②2天"), (4, "③4天"), (7, "④7天"), (15, "⑤15天"), (30, "⑥30天"))
@@ -753,44 +863,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             return
 
         try:
-            if parsed.path == "/patina/stats":
-                today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-                ts = int(today_start.timestamp() * 1000)
-                sessions = conn.execute(
-                    "SELECT app_name, exe_name, window_title, duration FROM sessions WHERE start_time>=? ORDER BY duration DESC", (ts,)
-                ).fetchall()
-                web = conn.execute(
-                    "SELECT domain, title, duration FROM web_activity_segments WHERE start_time>=? AND domain!='' ORDER BY duration DESC", (ts,)
-                ).fetchall()
-                apps, seen = [], {}
-                for s in sessions:
-                    key = s["app_name"] or s["exe_name"]
-                    title = s["window_title"] or ""
-                    subject = self._patina_subject(title)
-                    dur = max(0, (s["duration"] or 0) // 60000)
-                    if key in seen:
-                        seen[key]["duration"] += dur
-                        continue
-                    cat = "study" if subject else "browser" if key in ("msedge","chrome","firefox") else "entertainment" if key in ("哔哩哔哩","cloudmusic") else "other"
-                    seen[key] = {"appName":key,"category":cat,"matchedSubject":subject,"duration":dur,"title":title}
-                domains = {}
-                for w in web:
-                    d = w["domain"] or "unknown"
-                    if d not in domains:
-                        domains[d] = {"domain":d,"duration":0,"subject":self._patina_subject(w["title"] or d)}
-                    domains[d]["duration"] += max(0, (w["duration"] or 0) // 60000)
-                apps = sorted(seen.values(), key=lambda x: x["duration"], reverse=True)
-                study_min = sum(a["duration"] for a in apps if a["category"]=="study" or a["matchedSubject"])
-                total_min = sum(a["duration"] for a in apps)
-                conn.close()
-                self.wfile.write(json.dumps({
-                    "source":"patina","apps":apps,
-                    "webDomains":sorted(domains.values(),key=lambda x:x["duration"],reverse=True)[:20],
-                    "totalActiveMinutes":total_min,"effectiveStudyMinutes":study_min,
-                    "date":today_start.strftime("%Y-%m-%d")
-                }, ensure_ascii=False).encode())
-
-            elif parsed.path == "/patina/history":
+            if parsed.path == "/patina/history":
                 since = datetime.now() - timedelta(days=days)
                 ts = int(since.timestamp() * 1000)
                 rows = conn.execute(
@@ -819,9 +892,6 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 conn.close()
                 self.wfile.write(json.dumps(history, ensure_ascii=False).encode())
 
-            elif parsed.path == "/patina/health":
-                conn.close()
-                self.wfile.write(json.dumps({"available":True,"db_path":PATINA_DB,"size_mb":round(os.path.getsize(PATINA_DB)/(1024*1024),2)}).encode())
             else:
                 self.wfile.write(json.dumps({"error":"unknown"}).encode())
         finally:
@@ -951,6 +1021,29 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._respond({"error": "复习追踪器写入失败"})
             return
         self._respond({"ok": True, "checked": checked_iv})
+
+    def _sb_review_add(self, data):
+        """登记新知识点到复习追踪器（学习日期=今天，追加一行）"""
+        subject = str(data.get("subject", "")).strip()
+        point = str(data.get("point", "")).strip()
+        if not subject or not point:
+            self._respond({"error": "缺少 subject/point 字段"})
+            return
+        cn_map = {"电子": "电子", "高数": "高数", "数学": "高数", "英语": "英语", "政治": "政治"}
+        subject = cn_map.get(subject, subject)
+        today = datetime.now().strftime("%Y-%m-%d")
+        row = f"| {today} | {point} | {subject} | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |"
+        try:
+            if os.path.exists(TRACKER_PATH):
+                text = _sb_read_text(TRACKER_PATH)
+                content = text.rstrip("\n") + "\n" + row + "\n"
+            else:
+                content = TRACKER_HEADER + row + "\n"
+            _sb_atomic_write(TRACKER_PATH, content)
+        except OSError:
+            self._respond({"error": "复习追踪器写入失败"})
+            return
+        self._respond({"ok": True, "date": today})
 
     def _sb_mistakes_post(self, data):
         subject = str(data.get("subject", "")).strip()
@@ -1171,105 +1264,6 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                     "distractionMinutes": 0,
                 }).encode())
 
-        elif parsed.path == "/activity/audit":
-            # 数据审计：返回可信度分层 + 有效学习时间
-            today = datetime.now().strftime("%Y-%m-%d")
-            if not os.path.exists(DB_PATH):
-                self.wfile.write(json.dumps({"error": "no data"}).encode())
-                return
-
-            conn = get_db()
-            try:
-                # 拿原始明细（非聚合），逐条审计
-                rows = conn.execute("""
-                    SELECT process_name, category, window_title, duration_seconds, start_time, is_idle
-                    FROM activity WHERE date=? ORDER BY start_time
-                """, (today,)).fetchall()
-                idle_row = conn.execute(
-                    "SELECT COALESCE(SUM(duration_seconds), 0) FROM activity WHERE date=? AND is_idle=1",
-                    (today,)
-                ).fetchone()[0]
-            finally:
-                conn.close()
-
-            records = []
-            study_sec = 0
-            browser_study_sec = 0
-            browser_other_sec = 0
-            entertainment_sec = 0
-            social_sec = 0
-            other_sec = 0
-            idle_sec = idle_row
-
-            for r in rows:
-                proc = r[0]
-                cat = r[1]
-                title = r[2] or ""
-                dur = r[3]
-
-                credibility = "high"
-                effective = False
-
-                if cat == "study":
-                    credibility = "high"
-                    effective = True
-                    study_sec += dur
-                elif cat == "browser":
-                    new_cat, matched = reclassify_browser(title, proc)
-                    if new_cat == "study":
-                        credibility = "medium"
-                        effective = True
-                        browser_study_sec += dur
-                    else:
-                        credibility = "low"
-                        effective = False
-                        browser_other_sec += dur
-                elif cat in ("entertainment", "social"):
-                    credibility = "干扰"
-                    effective = False
-                    if cat == "entertainment":
-                        entertainment_sec += dur
-                    else:
-                        social_sec += dur
-                else:
-                    credibility = "low"
-                    effective = False
-                    other_sec += dur
-
-                records.append({
-                    "process": proc,
-                    "category": cat,
-                    "title": title[:80],
-                    "durationMinutes": dur // 60,
-                    "credibility": credibility,
-                    "effective": effective,
-                })
-
-            effective_total_sec = study_sec + browser_study_sec
-            distraction_total_sec = browser_other_sec + entertainment_sec + social_sec + other_sec
-            total_tracked_sec = effective_total_sec + distraction_total_sec + idle_sec
-
-            self.wfile.write(json.dumps({
-                "date": today,
-                "summary": {
-                    "totalTrackedMinutes": total_tracked_sec // 60,
-                    "effectiveStudyMinutes": effective_total_sec // 60,
-                    "distractionMinutes": distraction_total_sec // 60,
-                    "idleMinutes": idle_sec // 60,
-                    "executionRate": round(effective_total_sec / max(total_tracked_sec - idle_sec, 1) * 100, 1) if (total_tracked_sec - idle_sec) > 0 else 0,
-                },
-                "breakdown": {
-                    "study_high": {"minutes": study_sec // 60, "credibility": "高 — VSCode/PDF/笔记等原生学习应用"},
-                    "browser_study": {"minutes": browser_study_sec // 60, "credibility": "中 — 浏览器标题命中学科关键词"},
-                    "browser_other": {"minutes": browser_other_sec // 60, "credibility": "低/视为娱乐 — 浏览器标题未命中关键词"},
-                    "entertainment": {"minutes": entertainment_sec // 60, "credibility": "干扰 — 娱乐应用"},
-                    "social": {"minutes": social_sec // 60, "credibility": "干扰 — 社交通讯"},
-                    "other": {"minutes": other_sec // 60, "credibility": "低 — 未分类"},
-                    "idle": {"minutes": idle_sec // 60, "credibility": "不计入 — 5分钟无操作"},
-                },
-                "records": records,
-            }, ensure_ascii=False).encode())
-
         elif parsed.path == "/activity/raw":
             if os.path.exists(DB_PATH):
                 conn = get_db()
@@ -1314,22 +1308,6 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             else:
                 self.wfile.write(json.dumps([]).encode())
 
-        elif parsed.path == "/deepseek/key":
-            key = get_api_key()
-            if key:
-                masked = key[:2] + "****" + key[-2:] if len(key) > 8 else "****"
-                self.wfile.write(json.dumps({"hasKey": True, "key": masked}).encode())
-            else:
-                self.wfile.write(json.dumps({"hasKey": False}).encode())
-
-        elif parsed.path == "/search":
-            q = urllib.parse.parse_qs(parsed.query).get("q", [""])[0]
-            if q:
-                results = duckduckgo_search(q)
-                self.wfile.write(json.dumps(results, ensure_ascii=False).encode())
-            else:
-                self.wfile.write(json.dumps({"error": "missing query param q"}).encode())
-
         elif parsed.path == "/health":
             self.wfile.write(json.dumps({"status": "ok", "db_exists": os.path.exists(DB_PATH)}).encode())
 
@@ -1356,6 +1334,11 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             except ValueError:
                 top_k = 3
             items = rag_query(q, subject=params.get("subject", ""), top_k=top_k)
+            self.wfile.write(json.dumps({"items": items}, ensure_ascii=False).encode())
+
+        elif parsed.path == "/schedule/import-from-xls":
+            # 从桌面官方课表 XLS 解析课表（ScheduleItem[]，day 1=周一..7=周日）
+            items = parse_official_schedule_xls()
             self.wfile.write(json.dumps({"items": items}, ensure_ascii=False).encode())
 
         else:
@@ -1407,59 +1390,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         return "服务器内部错误"
 
     def _handle_post(self, parsed, body):
-        if parsed.path == "/deepseek/chat":
-            data = json.loads(body)
-            api_key = get_api_key()
-
-            if not api_key:
-                self._respond({"error": "请先设置DeepSeek API Key", "needKey": True})
-                return
-
-            messages = data.get("messages", [])
-            enable_search = data.get("search", False)
-
-            # If search enabled, extract the last user message and search the web
-            if enable_search and messages:
-                last_user = ""
-                for m in reversed(messages):
-                    if m.get("role") == "user":
-                        last_user = m.get("content", "")
-                        break
-                if last_user:
-                    search_results = duckduckgo_search(last_user, max_results=5)
-                    search_text = "\n\n".join([
-                        f"[{i+1}] {r['title']}\n{r['snippet']}\n{r['url']}"
-                        for i, r in enumerate(search_results) if r.get("title")
-                    ])
-                    if search_text:
-                        messages = [
-                            {"role": "system", "content": f"以下是联网搜索结果，请基于这些信息回答用户问题，并在回答中引用来源：\n\n{search_text}"},
-                            *messages,
-                        ]
-
-            try:
-                resp = req_lib.post(
-                    "https://api.deepseek.com/chat/completions",
-                    json={
-                        "model": "deepseek-reasoner",
-                        "messages": messages,
-                        "max_tokens": 8000,
-                    },
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    timeout=120,
-                )
-                if resp.status_code != 200:
-                    self._respond({"error": "服务器内部错误"})
-                    return
-                result = resp.json()
-                content = result["choices"][0]["message"]["content"]
-                if not content:
-                    content = result["choices"][0]["message"].get("reasoning_content", "")
-                self._respond({"content": content})
-            except Exception:
-                self._respond({"error": "服务器内部错误"})
-
-        elif parsed.path == "/deepseek/generate-question":
+        if parsed.path == "/deepseek/generate-question":
             # AI 出题：按科目+章节生成一道单选题，返回结构化 JSON
             data = json.loads(body)
             api_key = get_api_key()
@@ -1574,20 +1505,13 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             except Exception:
                 self._respond({"error": "服务器内部错误", "success": False})
 
-        elif parsed.path == "/deepseek/set-key":
-            data = json.loads(body)
-            key = data.get("key", "").strip()
-            if not key:
-                self._respond({"error": "Key is empty"})
-            elif not key.startswith("sk-"):
-                self._respond({"error": "Key 格式不正确，应以 sk- 开头"})
-            else:
-                open(DEEPSEEK_KEY_FILE, "w", encoding="utf-8").write(key)
-                self._respond({"ok": True})
-
         elif parsed.path == "/secondbrain/review-check":
             data = json.loads(body)
             self._sb_review_check(data)
+
+        elif parsed.path == "/secondbrain/review-add":
+            data = json.loads(body)
+            self._sb_review_add(data)
 
         elif parsed.path == "/secondbrain/mistakes":
             data = json.loads(body)

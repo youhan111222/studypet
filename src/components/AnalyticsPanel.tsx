@@ -370,7 +370,7 @@ export function AnalyticsPanel() {
             ) : (
               <div>
                 <div className="text-xs text-[var(--text-secondary)] mb-2">
-                  以下时段学习效率 <span className={RED_TEXT}>低于30%</span>（娱乐占比过高）：
+                  以下时段为<span className={RED_TEXT}>低效时段（低于自身 P25 分位）</span>（娱乐占比过高）：
                 </div>
                 <div className="flex flex-wrap gap-[6px]">
                   {lowEfficiencyHours.map(h => (

@@ -25,6 +25,7 @@ export function SchedulePanel() {
   const importSchedule = useStore(s => s.importSchedule);
   const clearSchedule = useStore(s => s.clearSchedule);
   const [importing, setImporting] = useState(false);
+  const [xlsImporting, setXlsImporting] = useState(false);
   const [importMsg, setImportMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -173,6 +174,25 @@ export function SchedulePanel() {
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  const handleXlsImport = async () => {
+    if (xlsImporting) return;
+    setXlsImporting(true);
+    setImportMsg('');
+    try {
+      const res = await fetch('/schedule/import-from-xls');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const items: ScheduleItem[] = (data && Array.isArray(data.items)) ? data.items : [];
+      if (items.length === 0) throw new Error('未解析到课程数据');
+      importSchedule(items);
+      setImportMsg(`已导入 ${items.length} 条课表`);
+    } catch (e: any) {
+      alert(`官方课表导入失败：${e.message}`);
+    } finally {
+      setXlsImporting(false);
+    }
+  };
+
   const today = new Date();
   const todayDay = today.getDay();
   const displayDay = todayDay === 0 ? 7 : todayDay;
@@ -236,6 +256,9 @@ export function SchedulePanel() {
             className="hidden" />
           <button onClick={() => fileRef.current?.click()} disabled={importing} className="p-[6px_14px] rounded-[6px] bg-[var(--accent)] text-[#000] text-[12px] font-medium disabled:opacity-50">
             {importing ? '导入中...' : '导入课表 (CSV/JSON/ICS)'}
+          </button>
+          <button onClick={handleXlsImport} disabled={xlsImporting} className="p-[6px_14px] rounded-[6px] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)] text-[12px] font-medium disabled:opacity-50">
+            {xlsImporting ? '导入中...' : '📅 官方课表（XLS）'}
           </button>
           {schedule.length > 6 && (
             <button onClick={clearSchedule} className="p-[6px_14px] rounded-[6px] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)] text-[12px]">重置</button>

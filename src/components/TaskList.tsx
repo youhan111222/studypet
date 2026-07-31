@@ -46,12 +46,6 @@ export function TaskList() {
         <div className="flex items-center gap-[12px]">
           <h2 className="text-[18px] font-semibold">今日任务</h2>
           <span className="text-[12px] text-[var(--text-secondary)]">{done}/{total} 完成</span>
-          {tasks.some(t => t.source === 'wechat') && (
-            <span className="text-[10px] p-[2px_8px] rounded-[10px] bg-[rgba(10,132,255,0.15)] text-[var(--blue)]">💬 含微信作业</span>
-          )}
-          {tasks.some(t => t.source === 'schedule') && (
-            <span className="text-[10px] p-[2px_8px] rounded-[10px] bg-[rgba(168,85,247,0.15)] text-[var(--purple)]">📅 课表导入</span>
-          )}
         </div>
         <button onClick={toggleAddTask} className="p-[6px_14px] rounded-[6px] bg-[var(--accent)] text-[#000] text-[12px] font-medium">
           + 添加任务
@@ -134,9 +128,6 @@ export function TaskList() {
 }
 
 function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => void; onDelete: () => void }) {
-  const icons: Record<string, string> = { wechat: '💬', schedule: '📅', ocr: '📸', manual: '✏️' };
-  const labels: Record<string, string> = { wechat: '微信', schedule: '课表', ocr: '截图', manual: '手动' };
-
   // 解析二选一格式：A / B（二选一） 或 A / B
   const choiceMatch = task.title.match(/^(.+?)\s*\/\s*(.+?)(?:\s*[（(]二选一[）)])?\s*$/);
   const isChoice = !!choiceMatch;
@@ -221,7 +212,6 @@ function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
         </div>
         <div className="text-[11px] text-[var(--text-secondary)] flex gap-[8px] mt-[2px]">
           <span>⏰ {task.time}</span>
-          <span>{icons[task.source]} {labels[task.source]}</span>
         </div>
       </div>
       <div className="flex gap-[4px] flex-shrink-0">
