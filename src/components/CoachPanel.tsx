@@ -2,9 +2,11 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { useMemoryStore } from '../store/memory';
 import { analyzeState } from '../store/stateAnalyzer';
+import { executeCoachActions } from '../store/coachActions';
 import { isWeekInRange, parseDate } from '../utils';
 import type { ChatMessage, SubjectKey, SubjectProgress } from '../types';
 import { API, SEMESTER_START, getCurrentWeek } from '../config';
+import { fetchReviewDue, getSecondBrainState, describeReviewDue, subjectName } from '../lib/secondbrain';
 
 const TOTAL_WEEKS = 17;
 const MIN_WIDTH = 380;
@@ -342,20 +344,11 @@ export function CoachPanel() {
         ).join('\n')
       : '  暂无考试记录（AI可录入：说"记录政治选择题得分"即可）';
 
-    const recent7Logs = logs.filter(l => {
-      const logDate = parseDate(l.date);
-      return (todayDate.getTime() - logDate.getTime()) <= 7 * 86400000;
-    });
-    const subjectStudyTime: Record<string, number> = {};
-    recent7Logs.forEach(l => {
-      const subj = String(l.category).toLowerCase();
-      if (['electronics', 'english', 'math', 'politics'].includes(subj)) {
-        subjectStudyTime[subj] = (subjectStudyTime[subj] || 0) + l.duration;
-      }
-    });
-    const studyTimeLines = Object.entries(subjectStudyTime)
-      .map(([k, v]) => `  ${subjectNames[k as SubjectKey]}: ${v}min`)
-      .join('\n') || '  暂无数据';
+    // activityLogs 只有分类没有科目维度，改为从 subjectProgress 判断近 7 天复习过的科目
+    const recentSubjects = (Object.entries(subjectProgress) as [SubjectKey, SubjectProgress][])
+      .filter(([, sp]) => sp.lastStudyDate && (todayDate.getTime() - parseDate(sp.lastStudyDate).getTime()) <= 7 * 86400000)
+      .map(([k]) => subjectNames[k]);
+    const studyTimeLines = recentSubjects.length > 0 ? `  ${recentSubjects.join(', ')}` : '  近7天无科目复习记录';
 
     const estimatedExamDate = parseDate('2027-03-25');
     const daysUntilExam = Math.ceil((estimatedExamDate.getTime() - todayDate.getTime()) / 86400000);
@@ -419,7 +412,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
   // ====== buildStateReport ======
   function buildStateReport(snapshot: ReturnType<typeof analyzeState>): string {
     const { current, alerts, warnings, positives, recommendations, coachFocus, courseTimeline } = snapshot;
-    const catNames: Record<string, string> = { study: '学习', entertainment: '娱乐', social: '社交', other: '其他' };
+    const catNames: Record<string, string> = { study: '学习', dev: '开发', tools: '工具', system: '系统', browser: '浏览器', entertainment: '娱乐', social: '社交', other: '其他' };
 
     const lines: string[] = [];
     lines.push('===== 状态感知报告（算法生成，优先级最高） =====');
@@ -499,6 +492,15 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
 
     const context = `【系统时间】${currentTime}\n` + buildContext(todayDateStr, todayFull, weekDates);
 
+    // SecondBrain 复习欠账（异步获取，失败静默 → 无；插在 system_state 最前面）
+    const [dueItems, sbState] = await Promise.all([fetchReviewDue(), getSecondBrainState()]);
+    const sbLines: string[] = dueItems.map(it => `- ${subjectName(it.subject)}·${it.point}：${describeReviewDue(it)}`);
+    if (sbLines.length === 0 && sbState && sbState.reviewOverdue > 0) {
+      sbLines.push(`- 累计 ${sbState.reviewOverdue} 项复习超期`);
+    }
+    if (sbLines.length === 0) sbLines.push('- 无');
+    const secondBrainSection = `【SecondBrain 复习欠账】\n${sbLines.join('\n')}`;
+
     const state = useStore.getState();
     const memories = useMemoryStore.getState().memories;
 
@@ -526,7 +528,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       crossDayContext = `\n\n【昨日对话摘要 — 教练可据此追问进展】\n昨天你和教练讨论了：${yesterdaySummary}\n如果今天的对话涉及相关内容，可以自然地问"昨天提到的XX今天做了吗？"`;
     }
 
-    const enrichedContext = stateReport + '\n\n' + context + crossDayContext;
+    const enrichedContext = secondBrainSection + '\n\n' + stateReport + '\n\n' + context + crossDayContext;
 
     const userContext = {
       user_id: "default_user",
@@ -624,168 +626,6 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
     return clean.replace(/\[MEMORY:[^\]]+\]/gi, '').trim();
   };
 
-  // ====== executeActions ======
-  const executeActions = (content: string): { cleanContent: string; summary?: string } => {
-    const actionRegex = /\[ACTION:(\w+)\]\s*(\{[\s\S]*?\})/gi;
-    let clean = content;
-    const results: string[] = [];
-    let match;
-    while ((match = actionRegex.exec(content)) !== null) {
-      const actionName = match[1];
-      let payload: any;
-      try { payload = JSON.parse(match[2]); } catch { continue; }
-      switch (actionName) {
-        case 'add_task': {
-          const title = payload.title || '新任务';
-          // 去重：检查是否已存在标题高度相似的任务（模糊匹配）
-          const existing = tasks.find(t => {
-            const a = t.title.toLowerCase().replace(/\s+/g, '');
-            const b = title.toLowerCase().replace(/\s+/g, '');
-            // 完全包含 或 编辑距离 ≤ 3
-            if (a.includes(b) || b.includes(a)) return true;
-            const common = [...a].filter(c => b.includes(c)).length;
-            return common >= Math.max(a.length, b.length) - 3;
-          });
-          if (existing) {
-            results.push(`任务「${title}」已存在（「${existing.title}」），跳过重复添加`);
-            break;
-          }
-          const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-          addTask({
-            id, title,
-            period: payload.period || 'morning', time: payload.time || '',
-            duration: payload.duration || 0, tags: payload.tags || [],
-            completed: false, source: 'coach',
-            deadline: payload.deadline, pomodoroCount: 0,
-          });
-          results.push(`已添加任务「${title}」`);
-          break;
-        }
-        case 'complete_task': {
-          const t = tasks.find(t => !t.completed && t.title.includes(payload.title));
-          if (t) { toggleTask(t.id); results.push(`已完成任务「${t.title}」`); }
-          else results.push(`未找到可完成的任务「${payload.title}」`);
-          break;
-        }
-        case 'delete_task': {
-          const t = tasks.find(t => t.title.includes(payload.title));
-          if (t) { deleteTask(t.id); results.push(`已删除任务「${t.title}」`); }
-          else results.push(`未找到任务「${payload.title}」`);
-          break;
-        }
-        case 'add_important': {
-          const id = `i-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-          const title = payload.title || '新事项';
-          // 去重
-          const exists = importantItems.find(i => !i.done && i.title.includes(title));
-          if (exists) {
-            results.push(`重要事项「${title}」已存在（「${exists.title}」），跳过重复添加`);
-            break;
-          }
-          addImportant({
-            id, title,
-            content: payload.content || '', priority: (payload.priority === 'high' ? 'high' : 'normal') as 'high' | 'normal',
-            done: false, createdAt: new Date().toISOString().slice(0, 10),
-            remindAt: payload.remindAt || payload.time || undefined,
-          });
-          const remindNote = payload.remindAt ? `（${payload.remindAt}前1小时提醒）` : '';
-          results.push(`已添加重要事项「${title}」${remindNote}`);
-          break;
-        }
-        case 'complete_important': {
-          const item = importantItems.find(i => !i.done && i.title.includes(payload.title));
-          if (item) { toggleImportant(item.id); results.push(`已完成重要事项「${item.title}」`); }
-          else results.push(`未找到可完成的事项「${payload.title}」`);
-          break;
-        }
-        case 'delete_important': {
-          const item = importantItems.find(i => i.title.includes(payload.title));
-          if (item) { deleteImportant(item.id); results.push(`已删除重要事项「${item.title}」`); }
-          else results.push(`未找到事项「${payload.title}」`);
-          break;
-        }
-        case 'add_schedule': {
-          addScheduleItem({
-            id: `s-${Date.now()}`,
-            name: payload.name || '新课程',
-            day: payload.day || 1,
-            timeStart: payload.timeStart || '',
-            timeEnd: payload.timeEnd || '',
-            location: payload.location || '',
-            teacher: '',
-            weeks: '1-17',
-          });
-          results.push(`已添加课表「${payload.name}」`);
-          break;
-        }
-        case 'update_schedule': {
-          const s = schedule.find(s => s.name === payload.courseName && s.day === payload.day);
-          if (s) {
-            updateScheduleItem(s.id, {
-              timeStart: payload.timeStart,
-              timeEnd: payload.timeEnd,
-              location: payload.location,
-            });
-            results.push(`已更新课表「${payload.courseName}」`);
-          } else {
-            results.push(`未找到课表「${payload.courseName}」`);
-          }
-          break;
-        }
-        case 'update_subject_progress': {
-          updateSubjectProgress(payload.subject, payload);
-          results.push(`已更新${payload.subject}学习进度`);
-          break;
-        }
-        case 'add_exam': {
-          addExamRecord({
-            id: payload.id || `e-${Date.now()}`,
-            subject: payload.subject,
-            score: payload.score,
-            totalScore: payload.totalScore,
-            examType: payload.examType || '章节测试',
-            examDate: payload.examDate,
-            notes: payload.notes || '',
-          });
-          results.push(`已记录${payload.subject}考试: ${payload.score}/${payload.totalScore}`);
-          break;
-        }
-        case 'chapter_mastery': {
-          updateChapterMastery(payload.subject, payload.chapter, payload.mastery);
-          results.push(`已更新「${payload.chapter}」掌握状态为 ${payload.mastery}`);
-          break;
-        }
-        case 'add_checklist': {
-          addStudyChecklist({
-            id: `cl-${Date.now()}`,
-            title: payload.title || '清单',
-            type: payload.type === 'verify' ? 'verify' : 'execute',
-            items: payload.items || [],
-            chapterName: payload.chapterName,
-            subject: payload.subject,
-          });
-          results.push(`已创建${payload.type === 'verify' ? '核查' : '执行'}清单「${payload.title}」`);
-          break;
-        }
-        case 'add_practice_log': {
-          addPracticeLog({
-            id: `pl-${Date.now()}`,
-            date: new Date().toISOString().slice(0, 10),
-            subject: payload.subject,
-            chapter: payload.chapter || '',
-            checklistUsed: payload.checklistUsed || '',
-            result: payload.result || '',
-            nextAction: payload.nextAction || '',
-          });
-          results.push(`已记录练习：${payload.chapter} — ${payload.result}`);
-          break;
-        }
-      }
-    }
-    clean = clean.replace(/\[ACTION:\w+\]\s*\{[\s\S]*?\}/gi, '').trim();
-    return { cleanContent: clean, summary: results.length > 0 ? results.join('；') : undefined };
-  };
-
   // ====== doSend: core send logic ======
   const doSend = useCallback(async (text: string) => {
     if (!text.trim() || loading) return;
@@ -811,7 +651,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
 
       let content = result.content || '（AI 返回了空内容，请重试）';
       content = extractMemories(content);
-      const { cleanContent: afterActions, summary: actionSummary } = executeActions(content);
+      const { cleanContent: afterActions, summary: actionSummary } = executeCoachActions(content);
       const { cleanContent, plan } = extractPlan(afterActions);
 
       const reply: ChatMessage = { id: `c-${Date.now()}`, role: 'coach', content: cleanContent, plan };
@@ -859,7 +699,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       }
       let content = result.content || '';
       content = extractMemories(content);
-      const { cleanContent: afterActions, summary: actionSummary } = executeActions(content);
+      const { cleanContent: afterActions, summary: actionSummary } = executeCoachActions(content);
       const { cleanContent, plan } = extractPlan(afterActions);
       addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: cleanContent, plan });
       if (actionSummary) {
@@ -888,61 +728,41 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
 
   // ====== Render ======
   return (
-    <div style={{
-      position: 'absolute', bottom: 12, right: 12,
-      width: effectiveWidth, height: 560, background: 'var(--bg-secondary)',
-      border: '1px solid var(--border)', borderRadius: 12,
-      display: 'flex', flexDirection: 'column',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.4)', zIndex: 100,
-      transition: isFullWidth ? 'width 0.2s ease' : 'none',
-    }}>
+    <div
+      className="absolute bottom-3 right-3 h-[560px] bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl flex flex-col shadow-[0_8px_32px_rgba(0,0,0,0.4)] z-[100]"
+      style={{
+        width: effectiveWidth,
+        transition: isFullWidth ? 'width 0.2s ease' : 'none',
+      }}
+    >
       {/* Left-edge drag handle */}
       {!isFullWidth && (
         <div
           onMouseDown={handleDragStart}
-          style={{
-            position: 'absolute', left: 0, top: 0, bottom: 0,
-            width: 6, cursor: 'ew-resize', zIndex: 10,
-            borderRadius: '12px 0 0 12px',
-          }}
+          className="absolute left-0 top-0 bottom-0 w-[6px] cursor-ew-resize z-10 rounded-l-xl"
         />
       )}
 
       {/* Title bar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '10px 14px', borderBottom: '1px solid var(--border)',
-        background: 'linear-gradient(135deg, rgba(78,204,163,0.08), rgba(10,132,255,0.08))',
-        borderRadius: '12px 12px 0 0',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 30, height: 30, borderRadius: '50%',
-            background: 'linear-gradient(135deg, #4ecca3, #0a84ff)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
-          }}>🐱</div>
+      <div className="flex items-center justify-between px-[14px] py-[10px] border-b border-[var(--border)] bg-[linear-gradient(135deg,rgba(78,204,163,0.08),rgba(10,132,255,0.08))] rounded-t-xl">
+        <div className="flex items-center gap-2">
+          <div className="w-[30px] h-[30px] rounded-full bg-[linear-gradient(135deg,#4ecca3,#0a84ff)] flex items-center justify-center text-[15px]">🐱</div>
           <div>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>AI 教练</span>
-            <span style={{
-              fontSize: 10, fontWeight: 700, marginLeft: 6, padding: '2px 6px', borderRadius: 4,
-              background: 'linear-gradient(135deg, rgba(78,204,163,0.2), rgba(10,132,255,0.2))',
-              color: 'var(--accent)',
-            }}>V7</span>
+            <span className="text-[13px] font-semibold">AI 教练</span>
+            <span className="text-[10px] font-bold ml-[6px] px-[6px] py-[2px] rounded bg-[linear-gradient(135deg,rgba(78,204,163,0.2),rgba(10,132,255,0.2))] text-[var(--accent)]">V7</span>
           </div>
-          <span style={{ fontSize: 10, color: 'var(--accent)' }}>● DeepSeek R1</span>
+          <span className="text-[10px] text-[var(--accent)]">● DeepSeek R1</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div className="flex items-center gap-1">
           {/* Voice toggle */}
           <button
             onClick={() => setVoiceOn(!voiceOn)}
             title={voiceOn ? '语音播报已开启' : '语音播报已关闭'}
-            style={{
-              padding: '2px 8px', borderRadius: 10, fontSize: 10,
-              background: voiceOn ? 'rgba(78,204,163,0.2)' : 'transparent',
-              border: voiceOn ? '1px solid #4ecca3' : '1px solid var(--border)',
-              color: voiceOn ? '#4ecca3' : 'var(--text-muted)',
-              cursor: 'pointer',
-            }}
+            className={`px-2 py-[2px] rounded-[10px] text-[10px] cursor-pointer border ${
+              voiceOn
+                ? 'bg-[rgba(78,204,163,0.2)] border-[#4ecca3] text-[#4ecca3]'
+                : 'bg-transparent border-[var(--border)] text-[var(--text-muted)]'
+            }`}
           >
             {voiceOn ? '🔊 语音' : '🔇'}
           </button>
@@ -950,31 +770,21 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
           <button
             onClick={() => setIsFullWidth(!isFullWidth)}
             title={isFullWidth ? '还原宽度' : '全宽显示'}
-            style={{
-              padding: '2px 8px', borderRadius: 10, fontSize: 10,
-              background: isFullWidth ? 'rgba(10,132,255,0.15)' : 'transparent',
-              border: isFullWidth ? '1px solid #0a84ff' : '1px solid var(--border)',
-              color: isFullWidth ? '#0a84ff' : 'var(--text-muted)',
-              cursor: 'pointer',
-            }}
+            className={`px-2 py-[2px] rounded-[10px] text-[10px] cursor-pointer border ${
+              isFullWidth
+                ? 'bg-[rgba(10,132,255,0.15)] border-[#0a84ff] text-[#0a84ff]'
+                : 'bg-transparent border-[var(--border)] text-[var(--text-muted)]'
+            }`}
           >
             {isFullWidth ? '⊠ 还原' : '⛶ 全宽'}
           </button>
           {/* Close */}
-          <button onClick={toggleCoach} style={{
-            background: 'none', color: 'var(--text-muted)', fontSize: 18, padding: '2px 6px',
-            cursor: 'pointer', border: 'none',
-          }}>×</button>
+          <button onClick={toggleCoach} className="bg-transparent text-[var(--text-muted)] text-[18px] px-[6px] py-[2px] cursor-pointer">×</button>
         </div>
       </div>
 
       {/* Session tabs */}
-      <div style={{
-        display: 'flex', gap: 4, padding: '8px 14px',
-        borderBottom: '1px solid var(--border)',
-        overflowX: 'auto', flexShrink: 0,
-        scrollbarWidth: 'none',
-      }}>
+      <div className="flex gap-1 px-[14px] py-2 border-b border-[var(--border)] overflow-x-auto shrink-0 [scrollbar-width:none]">
         {tabDates.map(date => {
           const active = date === activeSessionDate;
           const session = sessions.find(s => s.date === date);
@@ -983,16 +793,13 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
             <button
               key={date}
               onClick={() => setActiveSessionDate(date)}
-              style={{
-                padding: '4px 12px', borderRadius: 14, fontSize: 12,
-                whiteSpace: 'nowrap', cursor: 'pointer',
-                background: active ? 'var(--accent)' : 'var(--bg-tertiary)',
-                color: active ? '#000' : hasMessages ? 'var(--text-primary)' : 'var(--text-muted)',
-                border: active ? '1px solid var(--accent)' : '1px solid var(--border)',
-                fontWeight: active ? 600 : 400,
-                opacity: hasMessages || date === todayStr ? 1 : 0.5,
-                flexShrink: 0,
-              }}
+              className={`px-3 py-1 rounded-[14px] text-[12px] whitespace-nowrap cursor-pointer shrink-0 border ${
+                active
+                  ? 'bg-[var(--accent)] border-[var(--accent)] text-[#000] font-semibold'
+                  : `bg-[var(--bg-tertiary)] border-[var(--border)] ${
+                      hasMessages ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
+                    }`
+              } ${hasMessages || date === todayStr ? '' : 'opacity-50'}`}
             >
               {formatTabLabel(date, date === todayStr)}
             </button>
@@ -1001,71 +808,57 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       </div>
 
       {/* Messages area */}
-      <div style={{
-        flex: 1, overflowY: 'auto', padding: '10px 14px',
-        display: 'flex', flexDirection: 'column', gap: 10,
-      }}>
+      <div className="flex-1 overflow-y-auto px-[14px] py-[10px] flex flex-col gap-[10px]">
         {/* Yesterday summary banner (for non-today sessions) */}
         {!isToday && currentSession?.summary && (
-          <div style={{
-            padding: '8px 12px', borderRadius: 8, fontSize: 11,
-            background: 'rgba(78,204,163,0.08)', border: '1px solid rgba(78,204,163,0.2)',
-            color: 'var(--text-secondary)', marginBottom: 4,
-          }}>
-            <span style={{ color: '#4ecca3', fontWeight: 600 }}>📝 当日摘要：</span>
+          <div className="px-3 py-2 rounded-lg text-[11px] bg-[rgba(78,204,163,0.08)] border border-[rgba(78,204,163,0.2)] text-[var(--text-secondary)] mb-1">
+            <span className="text-[#4ecca3] font-semibold">📝 当日摘要：</span>
             {currentSession.summary}
           </div>
         )}
 
         {/* Status card for empty today session */}
         {isToday && isEmpty && statusCardData && (
-          <div style={{
-            padding: '16px', borderRadius: 12,
-            background: 'linear-gradient(135deg, rgba(78,204,163,0.06), rgba(10,132,255,0.06))',
-            border: '1px solid var(--border)',
-          }}>
+          <div className="p-4 rounded-xl bg-[linear-gradient(135deg,rgba(78,204,163,0.06),rgba(10,132,255,0.06))] border border-[var(--border)]">
             {/* Header */}
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="text-[14px] font-semibold mb-3 flex items-center gap-2">
               <span>📅</span>
               <span>{new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</span>
-              <span style={{
-                fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 10,
-                background: 'rgba(10,132,255,0.12)', color: '#0a84ff',
-              }}>第{statusCardData.semesterWeek}周</span>
+              <span className="text-[11px] font-medium px-2 py-[2px] rounded-[10px] bg-[rgba(10,132,255,0.12)] text-[#0a84ff]">第{statusCardData.semesterWeek}周</span>
             </div>
 
             {/* Info rows */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, marginBottom: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>📚 今日课表：</span>
-                <span style={{ color: 'var(--text-primary)' }}>
+            <div className="flex flex-col gap-[6px] text-[12px] mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--text-muted)] min-w-[90px]">📚 今日课表：</span>
+                <span className="text-[var(--text-primary)]">
                   {statusCardData.todayClasses.length > 0
                     ? `${statusCardData.todayClasses.length}节课`
                     : '无课'}
                 </span>
               </div>
               {statusCardData.todayClasses.length > 0 && (
-                <div style={{ paddingLeft: 98 }}>
+                <div className="pl-[98px]">
                   {statusCardData.todayClasses.map((c, i) => (
-                    <div key={i} style={{ color: 'var(--text-secondary)', fontSize: 11, lineHeight: 1.6 }}>
-                      {c.timeStart}-{c.timeEnd} {c.name} <span style={{ color: 'var(--text-muted)' }}>@{c.location}</span>
+                    <div key={i} className="text-[var(--text-secondary)] text-[11px] leading-[1.6]">
+                      {c.timeStart}-{c.timeEnd} {c.name} <span className="text-[var(--text-muted)]">@{c.location}</span>
                     </div>
                   ))}
                 </div>
               )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>📋 待完成：</span>
-                <span style={{ color: statusCardData.pendingTasks.length > 3 ? '#f59e0b' : 'var(--text-primary)' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--text-muted)] min-w-[90px]">📋 待完成：</span>
+                <span className={statusCardData.pendingTasks.length > 3 ? 'text-[#f59e0b]' : 'text-[var(--text-primary)]'}>
                   {statusCardData.pendingTasks.length}个任务
                 </span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>🔥 连胜：</span>
-                <span style={{ color: 'var(--text-primary)' }}>{useStore.getState().streak}天</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--text-muted)] min-w-[90px]">🔥 连胜：</span>
+                <span className="text-[var(--text-primary)]">{useStore.getState().streak}天</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>⏱ 已学习：</span>
-                <span style={{ color: 'var(--text-primary)' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--text-muted)] min-w-[90px]">⏱ 已学习：</span>
+                <span className="text-[var(--text-primary)]">
                   {statusCardData.todayStudyMin >= 60
                     ? `${Math.floor(statusCardData.todayStudyMin / 60)}h${statusCardData.todayStudyMin % 60}m`
                     : `${statusCardData.todayStudyMin}分钟`}
@@ -1074,9 +867,9 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
 
               {/* 今日到期复习 */}
               {statusCardData.reviewDue.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>🔔 待复习：</span>
-                  <span style={{ color: '#f59e0b', fontSize: 11 }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--text-muted)] min-w-[90px]">🔔 待复习：</span>
+                  <span className="text-[#f59e0b] text-[11px]">
                     {statusCardData.reviewDue.map(r => `${r.chapter}(${r.daysAgo}天前)`).join(', ')}
                   </span>
                 </div>
@@ -1085,14 +878,10 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
 
             {/* Recommendations */}
             {statusCardData.analysis.recommendations.length > 0 && (
-              <div style={{
-                padding: '10px 12px', borderRadius: 8,
-                background: 'rgba(78,204,163,0.08)', border: '1px solid rgba(78,204,163,0.15)',
-                marginBottom: 12,
-              }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#4ecca3', marginBottom: 6 }}>💡 今日建议</div>
+              <div className="px-3 py-[10px] rounded-lg bg-[rgba(78,204,163,0.08)] border border-[rgba(78,204,163,0.15)] mb-3">
+                <div className="text-[12px] font-semibold text-[#4ecca3] mb-[6px]">💡 今日建议</div>
                 {statusCardData.analysis.recommendations.slice(0, 3).map((r, i) => (
-                  <div key={i} style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                  <div key={i} className="text-[11px] text-[var(--text-secondary)] leading-[1.7]">
                     • {r}
                   </div>
                 ))}
@@ -1100,14 +889,10 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
             )}
 
             {/* Action buttons */}
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="flex gap-2">
               <button
                 onClick={() => doSend('你好教练，帮我分析一下今天的情况，给我一些建议')}
-                style={{
-                  flex: 1, padding: '8px 0', borderRadius: 10,
-                  background: 'var(--accent)', color: '#000',
-                  border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                }}
+                className="flex-1 py-2 rounded-[10px] bg-[var(--accent)] text-[#000] text-[13px] font-medium cursor-pointer"
               >
                 💬 开始对话
               </button>
@@ -1120,11 +905,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
                   const sorted = subjects.sort((a, b) => a[1].totalMinutes - b[1].totalMinutes);
                   state.startStudyTimer(sorted[0][0]);
                 }}
-                style={{
-                  flex: 1, padding: '8px 0', borderRadius: 10,
-                  background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-                  border: '1px solid var(--border)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                }}
+                className="flex-1 py-2 rounded-[10px] bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] text-[13px] font-medium cursor-pointer"
               >
                 🎯 先学5分钟
               </button>
@@ -1134,10 +915,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
 
         {/* Empty non-today session */}
         {!isToday && isEmpty && (
-          <div style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--text-muted)', fontSize: 12,
-          }}>
+          <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] text-[12px]">
             这天没有对话记录
           </div>
         )}
@@ -1145,63 +923,45 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
         {/* Messages */}
         {currentMessages.map(msg => (
           <div key={msg.id}>
-            <div style={{ display: 'flex', justifyContent: msg.role === 'coach' ? 'flex-start' : 'flex-end' }}>
-              <div style={{
-                maxWidth: '85%', padding: '8px 12px', borderRadius: 10,
-                background: msg.role === 'coach' ? 'var(--bg-tertiary)' : 'var(--accent)',
-                color: msg.role === 'coach' ? 'var(--text-primary)' : '#000',
-                fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap',
-                borderTopLeftRadius: msg.role === 'coach' ? 2 : 10,
-                borderTopRightRadius: msg.role === 'coach' ? 10 : 2,
-              }}>
+            <div className={`flex ${msg.role === 'coach' ? 'justify-start' : 'justify-end'}`}>
+              <div className={`max-w-[85%] px-3 py-2 rounded-[10px] text-[12px] leading-[1.6] whitespace-pre-wrap ${
+                msg.role === 'coach'
+                  ? 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-tl-[2px]'
+                  : 'bg-[var(--accent)] text-[#000] rounded-tr-[2px]'
+              }`}>
                 {msg.content}
               </div>
             </div>
 
             {msg.options && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, paddingLeft: 4 }}>
+              <div className="flex flex-wrap gap-[6px] mt-[6px] pl-1">
                 {msg.options.map(opt => (
-                  <button key={opt} onClick={() => handleOption(opt)} style={{
-                    padding: '4px 12px', borderRadius: 16,
-                    background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                    color: 'var(--text-primary)', fontSize: 11, cursor: 'pointer',
-                  }}>{opt}</button>
+                  <button key={opt} onClick={() => handleOption(opt)} className="px-3 py-1 rounded-[16px] bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] text-[11px] cursor-pointer">{opt}</button>
                 ))}
               </div>
             )}
 
             {msg.plan && (
-              <div style={{ marginTop: 6, paddingLeft: 4 }}>
+              <div className="mt-[6px] pl-1">
                 {msg.plan.map((p, i) => (
-                  <div key={i} style={{
-                    padding: '7px 10px', borderRadius: 8,
-                    background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                    marginBottom: 4, fontSize: 12, display: 'flex', justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}>
+                  <div key={i} className="px-[10px] py-[7px] rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] mb-1 text-[12px] flex justify-between items-center">
                     <div>
-                      <span style={{ color: 'var(--text-secondary)', marginRight: 8 }}>{p.time}</span>
+                      <span className="text-[var(--text-secondary)] mr-2">{p.time}</span>
                       {p.title}
                     </div>
-                    {p.tag && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(78,204,163,0.15)', color: 'var(--accent)' }}>{p.tag}</span>}
+                    {p.tag && <span className="text-[10px] px-[6px] py-[1px] rounded bg-[rgba(78,204,163,0.15)] text-[var(--accent)]">{p.tag}</span>}
                   </div>
                 ))}
-                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <div className="flex gap-[6px] mt-[6px]">
                   <button onClick={() => {
                     applyPlan(msg.plan);
                     const date = getTodayStr();
                     addMessage(date, { id: `u-${Date.now()}`, role: 'user', content: '确认应用计划' });
                     addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: '计划已应用！加油~' });
-                  }} style={{
-                    padding: '5px 14px', borderRadius: 6, background: 'var(--accent)', color: '#000',
-                    fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
-                  }}>
+                  }} className="px-[14px] py-[5px] rounded-md bg-[var(--accent)] text-[#000] text-[12px] font-medium cursor-pointer">
                     应用计划
                   </button>
-                  <button onClick={() => handleOption('调整一下计划')} style={{
-                    padding: '5px 14px', borderRadius: 6, background: 'var(--bg-tertiary)',
-                    color: 'var(--text-secondary)', border: '1px solid var(--border)', fontSize: 12, cursor: 'pointer',
-                  }}>调整</button>
+                  <button onClick={() => handleOption('调整一下计划')} className="px-[14px] py-[5px] rounded-md bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)] text-[12px] cursor-pointer">调整</button>
                 </div>
               </div>
             )}
@@ -1209,34 +969,23 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
         ))}
 
         {loading && (
-          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-            <div style={{
-              padding: '8px 12px', borderRadius: 10, background: 'var(--bg-tertiary)',
-              fontSize: 12, color: 'var(--text-muted)',
-            }}>小橘正在深度思考...</div>
+          <div className="flex justify-start">
+            <div className="px-3 py-2 rounded-[10px] bg-[var(--bg-tertiary)] text-[12px] text-[var(--text-muted)]">小橘正在深度思考...</div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
       {/* Quick action buttons */}
-      <div style={{
-        display: 'flex', gap: 4, padding: '0 14px 6px',
-        overflowX: 'auto', flexShrink: 0,
-        scrollbarWidth: 'none',
-      }}>
+      <div className="flex gap-1 px-[14px] pb-[6px] overflow-x-auto shrink-0 [scrollbar-width:none]">
         {quickActions.map(qa => (
           <button
             key={qa.label}
             onClick={() => doSend(qa.prompt)}
             disabled={loading}
-            style={{
-              padding: '4px 10px', borderRadius: 14, fontSize: 11,
-              whiteSpace: 'nowrap', cursor: loading ? 'default' : 'pointer',
-              background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-              color: 'var(--text-secondary)', opacity: loading ? 0.5 : 1,
-              flexShrink: 0,
-            }}
+            className={`px-[10px] py-1 rounded-[14px] text-[11px] whitespace-nowrap shrink-0 bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-secondary)] ${
+              loading ? 'cursor-default opacity-50' : 'cursor-pointer'
+            }`}
           >
             {qa.icon} {qa.label}
           </button>
@@ -1244,24 +993,21 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       </div>
 
       {/* Input area */}
-      <div style={{ display: 'flex', gap: 6, padding: '10px 14px', borderTop: '1px solid var(--border)' }}>
+      <div className="flex gap-[6px] px-[14px] py-[10px] border-t border-[var(--border)]">
         <input
           value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
           placeholder={isToday ? '问任何问题：学习、编程、写作、闲聊...' : '切换到今天才能发送新消息'}
           disabled={!isToday}
-          style={{
-            flex: 1, padding: '7px 12px', borderRadius: 8,
-            background: 'var(--bg-input)', border: '1px solid var(--border)',
-            color: 'var(--text-primary)', fontSize: 12, outline: 'none',
-            opacity: isToday ? 1 : 0.5,
-          }}
+          className={`flex-1 px-3 py-[7px] rounded-lg bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] text-[12px] outline-none ${
+            isToday ? '' : 'opacity-50'
+          }`}
         />
-        <button onClick={handleSend} disabled={loading || !isToday} style={{
-          padding: '7px 14px', borderRadius: 8, background: loading || !isToday ? 'var(--border)' : 'var(--accent)',
-          color: '#000', fontSize: 12, fontWeight: 500, opacity: loading || !isToday ? 0.5 : 1,
-          border: 'none', cursor: loading || !isToday ? 'default' : 'pointer',
-        }}>发送</button>
+        <button onClick={handleSend} disabled={loading || !isToday} className={`px-[14px] py-[7px] rounded-lg text-[#000] text-[12px] font-medium ${
+          loading || !isToday
+            ? 'bg-[var(--border)] opacity-50 cursor-default'
+            : 'bg-[var(--accent)] cursor-pointer'
+        }`}>发送</button>
       </div>
     </div>
   );

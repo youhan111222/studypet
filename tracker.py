@@ -43,6 +43,55 @@ def safe_print(obj):
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "activity.db")
 
+# 单实例锁：防止多个 tracker 重复写库（旧进程残留会双写记录）
+LOCK_FILE = os.path.join(os.path.dirname(DB_PATH), "tracker.lock")
+
+def _process_alive(pid):
+    """Windows 兼容的进程存活检查（os.kill(pid,0) 在 Windows 会直接杀进程！）"""
+    try:
+        import ctypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        h = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            return False
+        try:
+            exit_code = ctypes.c_ulong()
+            ok = ctypes.windll.kernel32.GetExitCodeProcess(h, ctypes.byref(exit_code))
+            return bool(ok) and exit_code.value == 259  # STILL_ACTIVE
+        finally:
+            ctypes.windll.kernel32.CloseHandle(h)
+    except Exception:
+        return False
+
+
+def _acquire_lock():
+    """原子获取单实例锁：'x' 模式独占创建，防止并发启动竞态"""
+    for attempt in range(2):
+        try:
+            with open(LOCK_FILE, "x") as f:
+                f.write(str(os.getpid()))
+            return  # 成功获得锁
+        except FileExistsError:
+            # 已有锁：检查持有者是否存活
+            try:
+                with open(LOCK_FILE, "r") as f:
+                    pid = int(f.read().strip())
+                if _process_alive(pid):
+                    logger.error(f"另一个 tracker 实例正在运行 (PID {pid})，退出")
+                    sys.exit(1)
+            except (ValueError, OSError):
+                pass
+            # 持有者已死：删除旧锁后重试接管
+            try:
+                os.remove(LOCK_FILE)
+            except OSError:
+                pass
+    logger.error("无法获取单实例锁，退出")
+    sys.exit(1)
+
+if os.environ.get("STUDYPET_TEST_MODE") != "1":
+    _acquire_lock()
+
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 conn = sqlite3.connect(DB_PATH, timeout=10)
@@ -226,27 +275,42 @@ def get_idle_seconds():
 # 已知应用用关键词快速命中，未知应用用 n-gram 向量推断
 
 # 训练语料：每个分类有多个"文档"（关键词组）
+# 注意：学习（study）和开发（dev）必须有明确关键词证据；终端/记事本等工具类用途不明不视为学习
 CATEGORY_TRAINING = [
-    # 学习/开发
-    ('study', ['vscode code visual-studio pycharm intellij idea eclipse webstorm sublime notepad++ notepad atom',
-               'terminal cmd powershell windows-terminal conhost alacritty',
-               'word excel powerpoint outlook onenote winword wps',
+    # 备考学习
+    ('study', ['word excel powerpoint outlook onenote winword wps',
                'pdf acrobat sumatra foxit',
                'notion obsidian typora logseq joplin evernote',
                'xmind mindmaster drawio',
-               'matlab rstudio jupyter spyder anaconda',
-               'photoshop illustrator figma sketch blender premiere afterfx']),
+               'matlab rstudio',
+               'edraw max', 'onenote']),
     # 浏览器
     ('browser', ['chrome msedge firefox brave opera browser edge chromium']),
     # 社交/通讯
     ('social', ['wechat weixin qq dingtalk tim telegram discord slack teams lark skype']),
-    # 娱乐
+    # 娱乐（含常见中文进程名）
     ('entertainment', ['steam epicgames battle.net origin ubisoft riot',
-                       'bilibili douyin youtube netflix twitch iqiyi youku potplayer vlc mpc movies',
-                       'cloudmusic qqmusic spotify foobar music']),
-    # 文件管理
-    ('other', ['explorer finder totalcmd everything',
-               'system protected restricted']),
+                       'bilibili 哔哩哔哩 douyin 抖音 youtube netflix twitch iqiyi youku potplayer vlc mpc movies',
+                       'cloudmusic qqmusic spotify foobar music',
+                       'kugou 酷狗 ximalaya 喜马拉雅']),
+    # 开发/编程（独立于备考学习）
+    ('dev', ['vscode code visual-studio pycharm intellij idea eclipse webstorm sublime atom',
+             'github gitlab gitee stackoverflow codeium cursor',
+             'docker kubernetes postman insomnia',
+             'jupyter spyder anaconda',
+             'blender unity unreal']),
+    # 文件管理/工具类（终端/记事本/设置面板用途不明）
+    ('tools', ['explorer finder totalcmd everything',
+               'terminal cmd powershell windows-terminal conhost alacritty',
+               'notepad notepad++',
+               'settings 设置 control-panel taskmgr regedit',
+               '输入法 rime weasel 小狼毫 ime']),
+    # 系统窗口（锁屏/桌面/通知等）
+    ('system', ['lockapp 锁屏 lockscreen',
+                'shellexperiencehost shellhost searchhost',
+                'cc-switch startmenu 开始菜单 desktop 桌面']),
+    # 兜底
+    ('other', ['system protected restricted', 'unknown']),
 ]
 
 class AppClassifier:
@@ -350,14 +414,29 @@ class AppClassifier:
                 scores[cat] = 0.0
 
         best_cat = max(scores, key=scores.get)
+        # 慢路径（向量猜测）不输出需要明确证据的类别（study/dev/tools/system），
+        # 避免 n-gram 巧合误报（opencode→code、lockapp→lock、输入法设置等）
+        if best_cat in ('study', 'dev', 'tools', 'system'):
+            best_cat = 'other'
         return best_cat, scores[best_cat]
 
 # 全局分类器实例
 _classifier = AppClassifier()
 
+# 中文进程名先验：中文名无法被英文关键词快路径识别，直接按进程名定类
+PROC_NAME_OVERRIDE = {
+    '哔哩哔哩': 'entertainment', '抖音': 'entertainment', '酷狗': 'entertainment',
+    '网易云音乐': 'entertainment', '优酷': 'entertainment',
+    '微信': 'social', '腾讯QQ': 'social',
+    '资源管理器': 'tools', '任务管理器': 'tools',
+    '输入法': 'tools',
+}
+
 
 def classify(title, proc):
     """分类入口：返回 category 字符串"""
+    if proc in PROC_NAME_OVERRIDE:
+        return PROC_NAME_OVERRIDE[proc]
     cat, confidence = _classifier.classify(title, proc)
     if confidence < 0.05:
         return 'other'
@@ -373,100 +452,133 @@ idle_start_time = 0.0   # 记录进入空闲的时间点
 POLL_SEC = 2
 IDLE_THRESHOLD_SEC = 300  # 5 分钟
 
-logger.info(f"进入主循环，空闲阈值={IDLE_THRESHOLD_SEC}s，DB={DB_PATH}")
 
-try:
-    while True:
-        try:
-            title, proc = get_active_window_info()
-            idle_sec = get_idle_seconds()
-            now = time.time()
-            date_str = datetime.now().strftime("%Y-%m-%d")
+def _run_main_loop():
+    global last_proc, last_title, last_start, last_idle_logged, idle_start_time
+    logger.info(f"进入主循环，空闲阈值={IDLE_THRESHOLD_SEC}s，DB={DB_PATH}")
+    try:
+        while True:
+            try:
+                title, proc = get_active_window_info()
+                idle_sec = get_idle_seconds()
+                now = time.time()
+                date_str = datetime.now().strftime("%Y-%m-%d")
 
-            is_idle = idle_sec >= IDLE_THRESHOLD_SEC
+                is_idle = idle_sec >= IDLE_THRESHOLD_SEC
 
-            if is_idle:
-                # 空闲超时：记录上一次活动的时长，然后进入空闲状态
-                if not last_idle_logged and last_proc:
-                    duration = int(now - last_start)
-                    cat = classify(last_title, last_proc)
-                    _write_activity(
-                        (last_title, last_proc, cat,
-                         datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-                         duration, date_str),
-                        is_idle=0, label="空闲记录"
-                    )
-                    safe_print({
-                        "event": "idle_start",
-                        "from": last_proc, "duration": duration,
-                        "idle_seconds": int(idle_sec)
-                    })
-                    last_proc = ''
-                    last_title = ''
-                    last_idle_logged = True
-                    idle_start_time = now  # 记录空闲起始时间
+                if is_idle:
+                    # 空闲超时：记录上一次活动的时长，然后进入空闲状态
+                    if not last_idle_logged and last_proc:
+                        duration = int(now - last_start)
+                        cat = classify(last_title, last_proc)
+                        _write_activity(
+                            (last_title, last_proc, cat,
+                             datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                             duration, date_str),
+                            is_idle=0, label="空闲记录"
+                        )
+                        safe_print({
+                            "event": "idle_start",
+                            "from": last_proc, "duration": duration,
+                            "idle_seconds": int(idle_sec)
+                        })
+                        last_proc = ''
+                        last_title = ''
+                        last_idle_logged = True
+                        idle_start_time = now  # 记录空闲起始时间
 
-            elif proc != last_proc or title != last_title:
-                # 如果刚从空闲恢复，先写入空闲记录
-                if last_idle_logged and idle_start_time > 0:
-                    idle_duration = int(now - idle_start_time)
-                    _write_activity(
-                        ('空闲', 'idle', 'idle',
-                         datetime.fromtimestamp(idle_start_time).strftime("%Y-%m-%d %H:%M:%S"),
-                         idle_duration, date_str),
-                        is_idle=1, label="空闲恢复记录"
-                    )
-                    safe_print({
-                        "event": "idle_end",
-                        "idle_duration": idle_duration,
-                        "resume_to": proc
-                    })
-                    idle_start_time = 0.0
+                elif proc != last_proc or title != last_title:
+                    # 如果刚从空闲恢复，先写入空闲记录
+                    if last_idle_logged and idle_start_time > 0:
+                        idle_duration = int(now - idle_start_time)
+                        _write_activity(
+                            ('空闲', 'idle', 'idle',
+                             datetime.fromtimestamp(idle_start_time).strftime("%Y-%m-%d %H:%M:%S"),
+                             idle_duration, date_str),
+                            is_idle=1, label="空闲恢复记录"
+                        )
+                        safe_print({
+                            "event": "idle_end",
+                            "idle_duration": idle_duration,
+                            "resume_to": proc
+                        })
+                        idle_start_time = 0.0
+                        last_idle_logged = False
+
+                    # 窗口切换：记录上一段活动
+                    if last_proc and not last_idle_logged:
+                        duration = int(now - last_start)
+                        cat = classify(last_title, last_proc)
+                        _write_activity(
+                            (last_title, last_proc, cat,
+                             datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                             duration, date_str),
+                            is_idle=0, label="窗口切换记录"
+                        )
+                        safe_print({
+                            "event": "switch",
+                            "from": last_proc, "to": proc,
+                            "duration": duration, "category": cat,
+                            "title": last_title
+                        })
+
+                    last_proc = proc
+                    last_title = title
+                    last_start = now
                     last_idle_logged = False
 
-                # 窗口切换：记录上一段活动
-                if last_proc and not last_idle_logged:
-                    duration = int(now - last_start)
-                    cat = classify(last_title, last_proc)
-                    _write_activity(
-                        (last_title, last_proc, cat,
-                         datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-                         duration, date_str),
-                        is_idle=0, label="窗口切换记录"
-                    )
-                    safe_print({
-                        "event": "switch",
-                        "from": last_proc, "to": proc,
-                        "duration": duration, "category": cat,
-                        "title": last_title
-                    })
+                # 增量落盘：每 60s 刷新/补写当前会话，防止进程被强杀（Stop-Process -Force）时丢失长会话
+                if not is_idle and last_proc and not last_idle_logged and (now - last_start) >= 60:
+                    try:
+                        dur = int(now - last_start)
+                        start_ts = datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S")
+                        cur = conn.execute(
+                            "SELECT id FROM activity WHERE start_time=? AND process_name=? AND is_idle=0 ORDER BY id DESC LIMIT 1",
+                            (start_ts, last_proc)
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            conn.execute("UPDATE activity SET duration_seconds=? WHERE id=?", (dur, row[0]))
+                        else:
+                            cat = classify(last_title, last_proc)
+                            conn.execute(_ACTIVITY_INSERT, (last_title, last_proc, cat, start_ts, dur, date_str, 0))
+                        conn.commit()
+                    except sqlite3.Error as e:
+                        logger.warning(f"增量落盘失败: {e}")
 
-                last_proc = proc
-                last_title = title
-                last_start = now
-                last_idle_logged = False
+                time.sleep(POLL_SEC)
 
-            time.sleep(POLL_SEC)
+            except KeyboardInterrupt:
+                raise  # 向外层抛出，走清理逻辑
+            except Exception as loop_err:
+                logger.error(f"循环内异常: {loop_err}", exc_info=True)
+                time.sleep(2)
+                continue
 
-        except KeyboardInterrupt:
-            raise  # 向外层抛出，走清理逻辑
-        except Exception as loop_err:
-            logger.error(f"循环内异常: {loop_err}", exc_info=True)
-            time.sleep(2)
-            continue
+    except KeyboardInterrupt:
+        logger.info("收到 KeyboardInterrupt，开始清理退出")
+        # 退出前保存当前活动
+        if last_proc and not last_idle_logged:
+            duration = int(time.time() - last_start)
+            cat = classify(last_title, last_proc)
+            if _write_activity(
+                (last_title, last_proc, cat,
+                 datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                 duration, datetime.now().strftime("%Y-%m-%d")),
+                is_idle=0, label="最后活动记录"
+            ):
+                logger.info(f"保存最后活动: {last_proc} ({duration}s)")
+        conn.close()
+        logger.info("数据库连接关闭，退出完成")
 
-except KeyboardInterrupt:
-    logger.info("收到 KeyboardInterrupt，开始清理退出")
-    # 退出前保存当前活动
-    if last_proc and not last_idle_logged:
-        duration = int(time.time() - last_start)
-        cat = classify(last_title, last_proc)
-        if _write_activity(
-            (last_title, last_proc, cat,
-             datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-             duration, datetime.now().strftime("%Y-%m-%d")),
-            is_idle=0, label="最后活动记录"
-        ):
-            logger.info(f"保存最后活动: {last_proc} ({duration}s)")
-    conn.close()
-    logger.info("数据库连接关闭，退出完成")
+if os.environ.get("STUDYPET_TEST_MODE") == "1":
+    logger.info("测试模式：跳过主循环")
+else:
+    try:
+        _run_main_loop()
+    finally:
+        # 释放单实例锁
+        try:
+            os.remove(LOCK_FILE)
+        except OSError:
+            pass

@@ -1,37 +1,20 @@
 ﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Task, Pet, Achievement, ChatMessage, ChatSession, CoachMode, WeekStats, ScheduleItem, ActivityLog, AppView, ImportantItem, SubjectProgress, SubjectKey, ExamRecord, MasteryLevel, StudyChecklist, PracticeLog } from '../types';
-// 用户真实专科课表（建筑工程相关），非假数据
-import { scheduleData } from './scheduleData';
-
-// ====== 科目推断工具函数 ======
-function inferSubjectFromTitle(title: string): SubjectKey | null {
-  const t = title.toLowerCase();
-  const keywords: Record<SubjectKey, string[]> = {
-    english: ['英语', '英文', '单词', '阅读', '语法', '作文', '翻译', '听力'],
-    math: ['高数', '数学', '微积分', '线代', '线性代数', '概率', '方程', '函数', '极限', '导数', '积分'],
-    politics: ['政治', '马原', '毛概', '思修', '近代史', '时政', '唯物', '辩证法'],
-    electronics: ['电子', '电路', '模电', '数电', '信号', '单片机', '通信', '三极管', '放大器', '嵌入式'],
-  };
-  for (const [key, kw] of Object.entries(keywords)) {
-    if (kw.some(word => t.includes(word.toLowerCase()))) {
-      return key as SubjectKey;
-    }
-  }
-  return null;
-}
+import { inferSubjectFromTitle } from '../utils';
+import type { Task, Pet, Achievement, ChatMessage, ChatSession, WeekStats, ScheduleItem, ActivityLog, ImportantItem, SubjectProgress, SubjectKey, ExamRecord, MasteryLevel, StudyChecklist, PracticeLog } from '../types';
+// 课表数据来自权威课表（XLS 解析），不再内置 seed
 
 interface Store {
   tasks: Task[]; pet: Pet; achievements: Achievement[]; sessions: ChatSession[]; activeSessionDate: string;
-  coachMode: CoachMode; weekStats: WeekStats; streak: number; activeView: AppView;
+  weekStats: WeekStats; streak: number;
   coachOpen: boolean; addTaskOpen: boolean; schedule: ScheduleItem[]; activityLogs: ActivityLog[]; autoPlan: boolean;
   importantItems: ImportantItem[];
   subjectProgress: Record<SubjectKey, SubjectProgress>;
   studyChecklists: StudyChecklist[];
   practiceLogs: PracticeLog[];
   toggleTask: (id: string) => void; addTask: (task: Task) => void; deleteTask: (id: string) => void;
-  setCoachMode: (mode: CoachMode) => void; addMessage: (date: string, msg: ChatMessage) => void; updateSessionSummary: (date: string, summary: string) => void;
-  toggleCoach: () => void; setView: (view: AppView) => void; toggleAddTask: () => void;
+  addMessage: (date: string, msg: ChatMessage) => void; updateSessionSummary: (date: string, summary: string) => void;
+  toggleCoach: () => void; toggleAddTask: () => void;
   applyPlan: (plan: ChatMessage['plan']) => void; addScheduleItem: (item: ScheduleItem) => void; updateScheduleItem: (id: string, updates: Partial<Pick<ScheduleItem, 'timeStart' | 'timeEnd' | 'location'>>) => void;
   importSchedule: (items: ScheduleItem[]) => void; clearSchedule: () => void;
   toggleAutoPlan: () => void;
@@ -101,13 +84,16 @@ export const ACHIEVEMENT_DEFS: Record<string, AchievementDef> = {
       if (!task.deadline) return state.achievements.find(a => a.id === 'a7')?.progress || 0;
       const current = state.achievements.find(a => a.id === 'a7')?.progress || 0;
       // 支持两种 DDL 格式：日期字符串 "2026-06-01" 或相对中文 "3天后"
-      const dateMatch = task.deadline.match(/(\d+)\s*天/);
+      const dateMatch = task.deadline.match(/^(\d+)\s*天后$/);
       if (dateMatch) {
         return current + (parseInt(dateMatch[1]) >= 3 ? 1 : 0);
       }
-      const deadlineDate = new Date(task.deadline);
+      const m = task.deadline.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const deadlineDate = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(task.deadline);
       if (!isNaN(deadlineDate.getTime())) {
-        const daysEarly = Math.ceil((deadlineDate.getTime() - Date.now()) / 86400000);
+        const today = new Date();
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const daysEarly = Math.round((deadlineDate.getTime() - startOfToday.getTime()) / 86400000);
         return current + (daysEarly >= 3 ? 1 : 0);
       }
       return current;
@@ -132,7 +118,7 @@ function computeStateAchievements(state: Store, streak: number): Achievement[] {
   });
 }
 
-const defaultSchedule: ScheduleItem[] = scheduleData;
+const defaultSchedule: ScheduleItem[] = [];
 
 const defaultLogs: ActivityLog[] = []; // 初始为空，由 tracker 填充
 
@@ -168,10 +154,8 @@ export const useStore = create<Store>()(
       achievements: defaultAchievements,
       sessions: [],
       activeSessionDate: new Date().toISOString().slice(0, 10),
-      coachMode: 'preview' as CoachMode,
       weekStats: { focusHours: 0, tasksCompleted: 0, pomodoroCount: 0, tasksSkipped: 0 },
       streak: 0,
-      activeView: 'tasks' as AppView,
       coachOpen: false,
       addTaskOpen: false,
       schedule: defaultSchedule,
@@ -189,12 +173,20 @@ export const useStore = create<Store>()(
       toggleTask: (id) => set(state => {
         const today = new Date().toISOString().slice(0, 10);
         // 勾选完成时把任务日期记为完成日（跨天补打卡才算今天，保证 streak 正确）
-        const tasks = state.tasks.map(t => t.id === id ? { ...t, completed: !t.completed, date: !t.completed ? today : t.date } : t);
+        // rewarded 标记首次完成即永久置 true：取消勾选不回滚，避免反复勾选重复奖励
+        const wasRewarded = state.tasks.find(t => t.id === id)?.rewarded === true;
+        const tasks = state.tasks.map(t => t.id === id ? {
+          ...t,
+          completed: !t.completed,
+          rewarded: !t.completed ? true : t.rewarded,
+          date: !t.completed ? today : t.date,
+        } : t);
         const task = tasks.find(t => t.id === id);
+        const shouldReward = task?.completed === true && !wasRewarded;
 
         const updates: Partial<Store> = { tasks };
         
-        if (task?.completed) {
+        if (shouldReward) {
           // 1. 宠物经验、金币、爱心
           let pet = { ...state.pet };
           pet.exp += 50; pet.coins += 10;
@@ -275,7 +267,6 @@ export const useStore = create<Store>()(
         tasks: [...state.tasks, { ...task, date: task.date || new Date().toISOString().slice(0, 10) }]
       })),
       deleteTask: (id) => set(state => ({ tasks: state.tasks.filter(t => t.id !== id) })),
-      setCoachMode: (mode) => set({ coachMode: mode }),
       addMessage: (date, msg) => set(state => {
         const sessions = [...state.sessions];
         const idx = sessions.findIndex(s => s.date === date);
@@ -300,7 +291,6 @@ export const useStore = create<Store>()(
         const today = new Date().toISOString().slice(0, 10);
         return { coachOpen: !state.coachOpen, activeSessionDate: today };
       }),
-      setView: (view) => set({ activeView: view }),
       toggleAddTask: () => set(state => ({ addTaskOpen: !state.addTaskOpen })),
       applyPlan: (plan) => {
         if (!plan) return;
@@ -453,7 +443,7 @@ export const useStore = create<Store>()(
       version: 4,
       migrate: (persisted: any, version: number) => {
         if (version < 3) {
-          persisted.state.schedule = scheduleData;
+          persisted.state.schedule = [];
         }
         // v3 → v4: 将旧 messages[] 迁移为 sessions[]
         if (version < 4 && persisted.state?.messages) {
@@ -504,7 +494,7 @@ export const useStore = create<Store>()(
           examRecords: state.examRecords.filter(r => r.examDate >= cutoffYear),
           sessions: state.sessions.slice(-60), // 保留最多 60 个 session
           activeSessionDate: state.activeSessionDate,
-          studyChecklists: state.studyChecklists,
+          studyChecklists: state.studyChecklists.slice(-50), // 保留最近50条清单，防止无限膨胀
           practiceLogs: state.practiceLogs.slice(-100), // 保留最近100条练习记录
         };
       },

@@ -1,4 +1,4 @@
-# StudyPet Watchdog — monitors all 3 service ports and restarts dead processes
+# StudyPet Watchdog — monitors all service ports and restarts dead processes
 # Run: powershell -WindowStyle Hidden -File watchdog.ps1
 #
 # CRITICAL: Uses netstat (not Get-NetTCPConnection) for port checking.
@@ -71,13 +71,6 @@ $Services = @(
         MinUpSecs = 5
     },
     @{
-        Name = "AI Coach"
-        Port = 19999
-        Exe = $(if (Test-Path $PythonwExe) { $PythonwExe } else { $PythonExe })
-        Args = "deepseek_service.py"
-        MinUpSecs = 5
-    },
-    @{
         Name = "Vite"
         Port = 5173
         Exe = $NodeExe
@@ -89,7 +82,7 @@ $Services = @(
 # --- Track consecutive failures per service ---
 $FailCounts = @{}
 
-Write-Log "=== Watchdog started (netstat mode, ports 19998 19999 5173) ==="
+Write-Log "=== Watchdog started (netstat mode, ports 19998 5173) ==="
 
 while ($true) {
     foreach ($svc in $Services) {

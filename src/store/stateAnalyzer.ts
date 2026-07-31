@@ -300,7 +300,10 @@ export function analyzeState(params: {
   // 9. 时段效率推荐
   const hourStudyMap: Record<number, number> = {};
   activityLogs.filter(l => l.category === 'study').forEach(l => {
-    const hh = parseInt(l.startTime?.split(':')[0]) || 0;
+    // 无 startTime 的记录（来自 stats 聚合同步）不参与时段统计，避免全部记到 0 点
+    if (!l.startTime) return;
+    const hh = parseInt(l.startTime.split(':')[0]);
+    if (isNaN(hh)) return;
     hourStudyMap[hh] = (hourStudyMap[hh] || 0) + l.duration;
   });
   const bestHour = Object.entries(hourStudyMap).sort((a, b) => b[1] - a[1])[0];

@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { SEMESTER_START, getCurrentWeek } from '../config';
+import { isWeekInRange } from '../utils';
 import type { ScheduleItem } from '../types';
 
 const dayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -181,21 +182,7 @@ export function SchedulePanel() {
   const [semesterStart, setSemesterStart] = useState(SEMESTER_START);
   const currentWeek = getCurrentWeek(semesterStart);
 
-  // 判断给定周次字符串是否包含当前周（支持 "13" / "1-17" / "1,3,5" / "1-8,10,12-14"）
-  const isWeekActive = (weeks: string, current: number): boolean => {
-    if (!weeks) return true;
-    const parts = weeks.split(',');
-    for (const part of parts) {
-      const trimmed = part.trim();
-      if (trimmed.includes('-')) {
-        const [start, end] = trimmed.split('-').map(Number);
-        if (current >= start && current <= end) return true;
-      } else {
-        if (Number(trimmed) === current) return true;
-      }
-    }
-    return false;
-  };
+  // 判断给定周次字符串是否包含当前周（支持 "13" / "1-17" / "1,3,5" / "1-8,10,12-14"）— 复用 utils.isWeekInRange
   // 课表数据中实际出现的最大周次（解析 weeks 字符串，支持 "13" / "1-17" / "1,3,5" / "1-8,10,12-14"）
   const maxWeek = useMemo(() => {
     let max = 0;
@@ -247,7 +234,7 @@ export function SchedulePanel() {
         <div className="flex gap-[8px]">
           <input ref={fileRef} type="file" accept=".csv,.json,.ics" onChange={handleFile}
             className="hidden" />
-          <button onClick={() => fileRef.current?.click()} disabled={importing} className="p-[6px_14px] rounded-[6px] bg-[var(--accent)] text-[#000] text-[12px] font-medium" style={{ opacity: importing ? 0.5 : 1 }}>
+          <button onClick={() => fileRef.current?.click()} disabled={importing} className="p-[6px_14px] rounded-[6px] bg-[var(--accent)] text-[#000] text-[12px] font-medium disabled:opacity-50">
             {importing ? '导入中...' : '导入课表 (CSV/JSON/ICS)'}
           </button>
           {schedule.length > 6 && (
@@ -284,10 +271,7 @@ export function SchedulePanel() {
       )}
 
       {importMsg && (
-        <div className="mb-[12px] p-[8px_12px] rounded-[6px] text-[12px] text-[var(--text-primary)]" style={{
-          background: importMsg.includes('失败') ? 'rgba(255,69,58,0.1)' : 'rgba(78,204,163,0.1)',
-          border: `1px solid ${importMsg.includes('失败') ? 'rgba(255,69,58,0.3)' : 'rgba(78,204,163,0.3)'}`,
-        }}>
+        <div className={`mb-[12px] p-[8px_12px] rounded-[6px] text-[12px] text-[var(--text-primary)] border ${importMsg.includes('失败') ? 'bg-[rgba(255,69,58,0.1)] border-[rgba(255,69,58,0.3)]' : 'bg-[rgba(78,204,163,0.1)] border-[rgba(78,204,163,0.3)]'}`}>
           {importMsg}
         </div>
       )}
@@ -296,21 +280,16 @@ export function SchedulePanel() {
         {[1, 2, 3, 4, 5, 6, 7].map(day => {
           const items = schedule.filter(s => {
             if (s.day !== day) return false;
-            return isWeekActive(s.weeks, effectiveWeek);
+            return isWeekInRange(s.weeks, effectiveWeek);
           });
           const dateObj = weekDates[day - 1];
           const dateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`;
           const isToday = dateStr === todayStr;
           return (
-            <div key={day} className="bg-[var(--bg-card)] rounded-[8px] p-[8px] min-h-[180px]" style={{
-              border: isToday ? '2px solid var(--accent)' : '1px solid var(--border)',
-              opacity: (day === 6 || day === 7) ? 0.85 : 1,
-            }}>
-              <div className="text-[12px] font-semibold mb-[6px] pb-[4px] border-b border-[var(--border)] flex justify-between items-baseline" style={{
-                color: isToday ? 'var(--accent)' : 'var(--text-primary)',
-              }}>
+            <div key={day} className={`rounded-[8px] p-[8px] min-h-[180px] ${isToday ? 'border-2 border-[var(--accent)] bg-[var(--bg-card)]' : 'border border-[var(--border)] bg-[var(--bg-card)]'} ${day === 6 || day === 7 ? 'opacity-85' : ''}`}>
+              <div className={`text-[12px] font-semibold mb-[6px] pb-[4px] border-b border-[var(--border)] flex justify-between items-baseline ${isToday ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
                 <span>{dayNames[day]}</span>
-                <span className="text-[10px] font-normal" style={{ color: isToday ? 'var(--accent)' : 'var(--text-muted)' }}>
+                <span className={`text-[10px] font-normal ${isToday ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`}>
                   {fmtDate(dateObj)}
                 </span>
               </div>

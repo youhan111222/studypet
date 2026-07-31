@@ -103,8 +103,8 @@ Set-Location $ScriptDir
 
 # Release occupied ports only if service is NOT responding (skip healthy ones)
 Write-Log "[3/4] Starting services..."
-$healthy = @{ 19998 = $false; 19999 = $false; 5173 = $false }
-$ports = @(19998, 19999, 5173)
+$healthy = @{ 19998 = $false; 5173 = $false }
+$ports = @(19998, 5173)
 foreach ($p in $ports) {
     $line = netstat -ano 2>$null | Select-String ":$p " | Select-String "LISTENING" | Select-Object -First 1
     if ($line) {
@@ -117,8 +117,6 @@ foreach ($p in $ports) {
                 try { $r = Invoke-WebRequest "http://localhost:5173/" -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { $skipKill = $true } } catch {}
             } elseif ($p -eq 19998) {
                 try { $r = Invoke-WebRequest "http://localhost:19998/activity/raw" -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { $skipKill = $true } } catch {}
-            } elseif ($p -eq 19999) {
-                try { $r = Invoke-WebRequest "http://localhost:19999/api/coach/health" -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { $skipKill = $true } } catch {}
             }
             if ($skipKill) {
                 $healthy[$p] = $true
@@ -146,24 +144,6 @@ if ($healthy[19998]) {
         Write-Log "API Server (19998) ready"
     } else {
         Write-Log "ERROR: API Server (19998) failed to start"
-    }
-}
-Start-Sleep 1
-
-# AI Coach (19999)
-if ($healthy[19999]) {
-    Write-Log "AI Coach (19999) already healthy, skipping start"
-} else {
-    Write-Log "Starting AI Coach (19999)..."
-    if (Test-Path $PythonwExe) {
-        Start-Process $PythonwExe -ArgumentList "deepseek_service.py" -WorkingDirectory $ScriptDir -WindowStyle Hidden
-    } else {
-        Start-Process $PythonExe -ArgumentList "deepseek_service.py" -WorkingDirectory $ScriptDir -WindowStyle Hidden
-    }
-    if (Test-Port 19999 -timeoutSec 15) {
-        Write-Log "AI Coach (19999) ready"
-    } else {
-        Write-Log "ERROR: AI Coach (19999) failed to start"
     }
 }
 Start-Sleep 1
@@ -213,9 +193,8 @@ if ($healthy[5173]) {
 # Step 4: Final verification
 Write-Log "[4/4] Verifying all services..."
 $apiOk = Test-Port 19998 -timeoutSec 3
-$aiOk = Test-Port 19999 -timeoutSec 3
 $viteOk = Test-Port 5173 -timeoutSec 3
-Write-Log "Final status — API: $apiOk, AI: $aiOk, Vite: $viteOk"
+Write-Log "Final status — API: $apiOk, Vite: $viteOk"
 
 if ($viteOk -and $apiOk) {
     Write-Log "StudyPet ready: http://localhost:5173"
@@ -227,7 +206,6 @@ if ($viteOk -and $apiOk) {
 } else {
     if (-not $viteOk) { Write-Log "ERROR: Vite frontend not running" }
     if (-not $apiOk) { Write-Log "ERROR: API backend not running" }
-    if (-not $aiOk) { Write-Log "WARN: AI Coach not running" }
     Write-Log "Check D:\StudyPet\*.log for details"
 }
 

@@ -5,19 +5,34 @@ import type { ActivityLog } from '../types';
 
 const catColors: Record<string, string> = {
   study: 'var(--accent)',
+  dev: '#61afef',
+  tools: '#8a8a8a',
+  system: '#6b6b6b',
+  browser: '#0a84ff',
   entertainment: 'var(--red-soft)',
-  social: '#0a84ff',
+  social: '#ffa726',
   other: 'var(--text-muted)',
   idle: 'var(--text-muted)',
 };
 
 const catLabels: Record<string, string> = {
   study: '学习',
+  dev: '开发',
+  tools: '工具',
+  system: '系统',
+  browser: '浏览器',
   entertainment: '娱乐',
   social: '社交',
   other: '其他',
   idle: '空闲',
 };
+
+const catIcons: Record<string, string> = {
+  study: '📖', dev: '💻', tools: '🔧', system: '🖥️',
+  browser: '🌐', entertainment: '🎮', social: '💬', other: '📂', idle: '💤',
+};
+
+const catOrder = ['study', 'dev', 'entertainment', 'social', 'tools', 'system', 'browser', 'other'];
 
 interface RealActivity {
   appName: string;
@@ -73,11 +88,6 @@ export function ActivityTracker() {
   const idleMinutes = useReal ? stats.idleMinutes : 0;
   const totalAll = totalActive + idleMinutes;
 
-  const studyMin = useReal ? (stats.categories['study'] || 0) : logs.filter(l => l.category === 'study').reduce((s, l) => s + l.duration, 0);
-  const entMin = useReal ? (stats.categories['entertainment'] || 0) : logs.filter(l => l.category === 'entertainment').reduce((s, l) => s + l.duration, 0);
-  const socialMin = useReal ? (stats.categories['social'] || 0) : logs.filter(l => l.category === 'social').reduce((s, l) => s + l.duration, 0);
-  const otherMin = useReal ? (stats.categories['other'] || 0) : logs.filter(l => l.category === 'other').reduce((s, l) => s + l.duration, 0);
-
   const groups: Record<string, { total: number; logs: typeof logs }> = {};
   for (const l of logs) {
     const key = l.appName;
@@ -87,105 +97,79 @@ export function ActivityTracker() {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px 24px', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+    <div className="flex-1 flex flex-col p-[20px_24px] overflow-hidden">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>屏幕活动追踪</h2>
-          <span style={{
-            fontSize: 10,
-            color: useReal ? 'var(--accent)' : 'var(--text-muted)',
-          }}>
+          <h2 className="text-[18px] font-semibold m-0">屏幕活动追踪</h2>
+          <span className={`text-[10px] ${useReal ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}`}>
             {useReal ? '● 实时采集 · 每5秒刷新' : '○ 演示数据 · 启动 tracker.py 接入真实数据'}
           </span>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-        {[
-          { cat: 'study', value: studyMin, icon: '📖' },
-          { cat: 'entertainment', value: entMin, icon: '🎮' },
-          { cat: 'social', value: socialMin, icon: '💬' },
-          { cat: 'other', value: otherMin, icon: '📂' },
-        ].map(item => (
-          <div key={item.cat} style={{
-            flex: 1, padding: 14, borderRadius: 8,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            textAlign: 'center',
-          }}>
-            <div style={{ fontSize: 20 }}>{item.icon}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: catColors[item.cat], marginTop: 4 }}>
-              {Math.floor(item.value / 60)}h {item.value % 60}m
+      <div className="flex gap-3 mb-5 flex-wrap">
+        {catOrder.filter(cat => (stats?.categories && (stats.categories[cat] || 0) > 0) || (!useReal && logs.some(l => l.category === cat))).map(cat => (
+          <div key={cat} className="flex-1 min-w-[100px] p-[14px] rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-center">
+            <div className="text-[20px]">{catIcons[cat]}</div>
+            <div className="text-[16px] font-bold mt-1" style={{ color: catColors[cat] }}>
+              {Math.floor((stats?.categories?.[cat] || logs.filter(l => l.category === cat).reduce((s, l) => s + l.duration, 0)) / 60)}h {(stats?.categories?.[cat] || logs.filter(l => l.category === cat).reduce((s, l) => s + l.duration, 0)) % 60}m
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{catLabels[item.cat]}</div>
-            <div style={{
-              height: 3, background: 'var(--border)', borderRadius: 2, marginTop: 6, overflow: 'hidden',
-            }}>
-              <div style={{
-                width: `${totalAll > 0 ? (item.value / totalAll) * 100 : 0}%`,
-                height: '100%', background: catColors[item.cat], borderRadius: 2,
-              }} />
+            <div className="text-[11px] text-[var(--text-secondary)]">{catLabels[cat]}</div>
+            <div className="h-[3px] bg-[var(--border)] rounded-sm mt-[6px] overflow-hidden">
+              <div
+                className="h-full rounded-sm"
+                style={{
+                  width: `${totalAll > 0 ? ((stats?.categories?.[cat] || logs.filter(l => l.category === cat).reduce((s, l) => s + l.duration, 0)) / totalAll) * 100 : 0}%`,
+                  background: catColors[cat],
+                }}
+              />
             </div>
           </div>
         ))}
-        <div style={{
-          flex: 1, padding: 14, borderRadius: 8,
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 20 }}>⏰</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4 }}>
+        <div className="flex-1 p-[14px] rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-center">
+          <div className="text-[20px]">⏰</div>
+          <div className="text-[16px] font-bold mt-1 text-[var(--text-primary)]">
             {Math.floor(totalAll / 60)}h {totalAll % 60}m
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>总时长（含空闲）</div>
+          <div className="text-[11px] text-[var(--text-secondary)]">总时长（含空闲）</div>
         </div>
         {useReal && idleMinutes > 0 && (
-          <div style={{
-            flex: 1, padding: 14, borderRadius: 8,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            textAlign: 'center',
-          }}>
-            <div style={{ fontSize: 20 }}>💤</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)', marginTop: 4 }}>
+          <div className="flex-1 p-[14px] rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-center">
+            <div className="text-[20px]">💤</div>
+            <div className="text-[16px] font-bold mt-1 text-[var(--text-muted)]">
               {Math.floor(idleMinutes / 60)}h {idleMinutes % 60}m
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>空闲（离开电脑）</div>
+            <div className="text-[11px] text-[var(--text-secondary)]">空闲（离开电脑）</div>
           </div>
         )}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
+      <div className="flex-1 overflow-y-auto">
+        <h3 className="text-[14px] font-semibold mb-[10px]">
           应用详情（按进程合并）
         </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="flex flex-col gap-[6px]">
           {Object.entries(groups).sort((a, b) => b[1].total - a[1].total).map(([name, group]) => {
             const cat = group.logs[0]?.category || 'other';
             const pct = totalAll > 0 ? Math.round((group.total / totalAll) * 100) : 0;
             return (
-              <div key={name} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '8px 12px', borderRadius: 8,
-                background: 'var(--bg-card)', border: '1px solid var(--border)',
-              }}>
-                <div style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: catColors[cat], flexShrink: 0,
-                }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{name}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+              <div key={name} className="flex items-center gap-[10px] px-3 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border)]">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: catColors[cat] }} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-medium">{name}</div>
+                  <div className="text-[10px] text-[var(--text-muted)]">
                     {catLabels[cat]} · {useReal ? `${group.logs.length} 个会话` : `${group.logs.length} 条记录`}
                   </div>
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: catColors[cat] }}>
+                <div className="text-[12px] font-semibold" style={{ color: catColors[cat] }}>
                   {Math.floor(group.total / 60)}h {group.total % 60}m
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{pct}%</div>
+                <div className="text-[11px] text-[var(--text-muted)]">{pct}%</div>
               </div>
             );
           })}
           {Object.keys(groups).length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+            <div className="text-center py-10 text-[var(--text-muted)] text-[13px]">
               {useReal ? '暂无活动数据，等待窗口切换...' : '暂无数据'}
             </div>
           )}
@@ -193,12 +177,8 @@ export function ActivityTracker() {
       </div>
 
       {!useReal && (
-        <div style={{
-          marginTop: 12, padding: 10, borderRadius: 8,
-          background: 'rgba(10,132,255,0.1)', border: '1px solid rgba(10,132,255,0.2)',
-          fontSize: 11, color: 'var(--text-secondary)',
-        }}>
-          提示：运行 <code style={{ color: 'var(--accent)' }}>python tracker.py</code> 启动真实屏幕活动追踪，数据实时写入 SQLite 并由 API 服务提供。
+        <div className="mt-3 p-[10px] rounded-lg bg-[rgba(10,132,255,0.1)] border border-[rgba(10,132,255,0.2)] text-[11px] text-[var(--text-secondary)]">
+          提示：运行 <code className="text-[var(--accent)]">python tracker.py</code> 启动真实屏幕活动追踪，数据实时写入 SQLite 并由 API 服务提供。
         </div>
       )}
     </div>

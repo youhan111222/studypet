@@ -84,6 +84,15 @@ export const useMemoryStore = create<MemoryStore>()(
     {
       name: 'studypet-memory',
       version: 1,
+      // 只持久化 90 天内的记忆（高优先级 ≥8 永久保留），防止无限膨胀
+      partialize: (state) => {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 90);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        return {
+          memories: state.memories.filter(m => m.priority >= 8 || m.updatedAt >= cutoffStr),
+        };
+      },
     }
   )
 );

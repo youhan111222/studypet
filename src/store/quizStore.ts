@@ -2,9 +2,33 @@ import { create } from 'zustand';
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from 'ts-fsrs';
 import { db } from '../db';
 import { useStore } from './useStore';
+import { archiveMistake } from '../lib/secondbrain';
 import type { Question, Attempt, ReviewCard, SubjectKey, ErrorTag, MasteryLevel } from '../types';
 
 const scheduler = fsrs();
+
+// ====== 错题归档节流：同一题 10 分钟内只归档一次 ======
+const lastArchiveTs = new Map<string, number>();
+const ARCHIVE_THROTTLE_MS = 10 * 60 * 1000;
+
+function maybeArchiveMistake(q: Question, userAnswer: string, errorTags: ErrorTag[] | undefined) {
+  if (!q || q.source !== 'manual') return;
+  const now = Date.now();
+  const last = lastArchiveTs.get(q.id);
+  if (last !== undefined && now - last < ARCHIVE_THROTTLE_MS) return;
+  lastArchiveTs.set(q.id, now);
+  // fire-and-forget：不阻塞判题流程，失败静默（lib 内已 try/catch）
+  void archiveMistake({
+    subject: q.subject,
+    chapter: q.chapter,
+    stem: q.stem,
+    answer: q.answer,
+    userAnswer,
+    analysis: q.analysis || '',
+    errorTags: errorTags || [],
+    date: new Date().toISOString().slice(0, 10),
+  });
+}
 
 interface QuizStore {
   currentSubject: SubjectKey | null;
@@ -53,6 +77,21 @@ function toReviewCard(fsrsCard: Card, question: Question): ReviewCard {
     subject: question.subject,
     chapter: question.chapter,
   };
+}
+
+/** 持久化 ReviewCard → fsrs Card（唯一转换入口，fsrs 升级只改这里） */
+function fsrsCardFromReview(existing: ReviewCard): Card {
+  return {
+    due: new Date(existing.due),
+    stability: existing.stability,
+    difficulty: existing.difficulty,
+    elapsed_days: existing.elapsed_days,
+    scheduled_days: existing.scheduled_days,
+    reps: existing.reps,
+    lapses: existing.lapses,
+    state: existing.state as unknown as Card['state'],
+    last_review: existing.lastReview ? new Date(existing.lastReview) : null,
+  } as Card;
 }
 
 function ratingFromCorrect(isCorrect: boolean, timeSpent: number): Grade {
@@ -110,91 +149,101 @@ export const useQuizStore = create<QuizStore>((set, get) => ({
   dueCount: 0,
 
   loadQuestions: async (subject, chapter?, count = 20) => {
-    let qs: Question[];
-    if (chapter) {
-      qs = await db.getQuestionsByChapter(subject, chapter);
-    } else {
-      qs = await db.getQuestionsBySubject(subject, count);
+    try {
+      let qs: Question[];
+      if (chapter) {
+        qs = await db.getQuestionsByChapter(subject, chapter);
+      } else {
+        qs = await db.getQuestionsBySubject(subject, count);
+      }
+      qs = qs.sort(() => Math.random() - 0.5).slice(0, count);
+      set({
+        currentSubject: subject, currentChapter: chapter || null, questions: qs,
+        currentIndex: 0, showResult: false, selectedAnswer: '',
+        correctCount: 0, wrongCount: 0, questionStartTime: Date.now(),
+      });
+    } catch (e) {
+      console.error('loadQuestions 失败:', e);
+      set({ currentSubject: subject, questions: [], currentIndex: 0, showResult: false, correctCount: 0, wrongCount: 0 });
     }
-    qs = qs.sort(() => Math.random() - 0.5).slice(0, count);
-    set({
-      currentSubject: subject, currentChapter: chapter || null, questions: qs,
-      currentIndex: 0, showResult: false, selectedAnswer: '',
-      correctCount: 0, wrongCount: 0, questionStartTime: Date.now(),
-    });
   },
 
   loadDueReviews: async () => {
-    const cards = await db.getDueReviews();
-    set({ reviewCards: cards, reviewIndex: 0, showResult: false, selectedAnswer: '' });
-    if (cards.length > 0) {
-      const qIds = cards.map((c: ReviewCard) => c.questionId);
-      const qs = await db.questions.bulkGet(qIds);
-      // Use Map to preserve alignment even if some IDs are missing
-      const qMap = new Map<string, Question>();
-      qs.forEach((q, i) => { if (q) qMap.set(qIds[i], q); });
-      const aligned = qIds.map(id => qMap.get(id)).filter(Boolean) as Question[];
-      set({ questions: aligned, currentIndex: 0 });
+    try {
+      const cards = await db.getDueReviews();
+      set({ reviewCards: cards, reviewIndex: 0, showResult: false, selectedAnswer: '' });
+      if (cards.length > 0) {
+        const qIds = cards.map((c: ReviewCard) => c.questionId);
+        const qs = await db.questions.bulkGet(qIds);
+        // Use Map to preserve alignment even if some IDs are missing
+        const qMap = new Map<string, Question>();
+        qs.forEach((q, i) => { if (q) qMap.set(qIds[i], q); });
+        const aligned = qIds.map(id => qMap.get(id)).filter(Boolean) as Question[];
+        set({ questions: aligned, currentIndex: 0 });
+      }
+    } catch (e) {
+      console.error('loadDueReviews 失败:', e);
+      set({ reviewCards: [], dueCount: 0, questions: [], reviewIndex: 0 });
     }
   },
 
   selectAnswer: (answer) => set({ selectedAnswer: answer }),
 
   submitAnswer: async (errorTags?: ErrorTag[], selfGrade?: boolean) => {
-    const { questions, currentIndex, selectedAnswer, questionStartTime } = get();
-    if (questions.length === 0) return;
-    const q = questions[currentIndex];
-    // essay 不自评：以用户自评结果为准；其余按题型判定
-    const isCorrect = q.type === 'essay' ? selfGrade === true : judgeAnswer(q, selectedAnswer);
-    const now = new Date().toISOString();
-    const elapsed = Math.round((Date.now() - questionStartTime) / 1000);
+    try {
+      const { questions, currentIndex, selectedAnswer, questionStartTime } = get();
+      if (questions.length === 0) return;
+      const q = questions[currentIndex];
+      // essay 不自评：以用户自评结果为准；其余按题型判定
+      const isCorrect = q.type === 'essay' ? selfGrade === true : judgeAnswer(q, selectedAnswer);
+      // SecondBrain 错题归档（manual 题判错时，10 分钟节流，fire-and-forget）
+      if (!isCorrect) {
+        maybeArchiveMistake(q, selectedAnswer, errorTags);
+      }
+      const now = new Date().toISOString();
+      const elapsed = Math.round((Date.now() - questionStartTime) / 1000);
 
-    const attempt: Attempt = {
-      id: `${q.id}-${Date.now()}`,
-      questionId: q.id,
-      date: now.slice(0, 10),
-      userAnswer: selectedAnswer,
-      isCorrect,
-      timeSpent: elapsed,
-      errorTags: isCorrect ? [] : (errorTags || []),
-    };
+      const attempt: Attempt = {
+        id: `${q.id}-${Date.now()}`,
+        questionId: q.id,
+        date: now.slice(0, 10),
+        userAnswer: selectedAnswer,
+        isCorrect,
+        timeSpent: elapsed,
+        errorTags: isCorrect ? [] : (errorTags || []),
+      };
 
-    await db.attempts.put(attempt);
+      await db.attempts.put(attempt);
 
-    // FSRS scheduling with actual elapsed time
-    const existing = await db.reviewCards.where('questionId').equals(q.id).first();
-    let card: Card;
+      // FSRS scheduling with actual elapsed time
+      const existing = await db.reviewCards.where('questionId').equals(q.id).first();
+      let card: Card;
 
-    if (existing) {
-      card = {
-        due: new Date(existing.due),
-        stability: existing.stability,
-        difficulty: existing.difficulty,
-        elapsed_days: existing.elapsed_days,
-        scheduled_days: existing.scheduled_days,
-        reps: existing.reps,
-        lapses: existing.lapses,
-        state: existing.state as unknown as Card['state'],
-        last_review: existing.lastReview ? new Date(existing.lastReview) : null,
-      } as Card;
-      card = scheduler.next(card, new Date(), ratingFromCorrect(isCorrect, elapsed)).card;
-    } else {
-      card = createEmptyCard();
-      card = scheduler.next(card, new Date(), ratingFromCorrect(isCorrect, elapsed)).card;
+      if (existing) {
+        card = fsrsCardFromReview(existing);
+        card = scheduler.next(card, new Date(), ratingFromCorrect(isCorrect, elapsed)).card;
+      } else {
+        card = createEmptyCard();
+        card = scheduler.next(card, new Date(), ratingFromCorrect(isCorrect, elapsed)).card;
+      }
+
+      const reviewCard = toReviewCard(card, q);
+      await db.reviewCards.put(reviewCard);
+
+      set(s => ({
+        showResult: true,
+        lastAttempt: attempt,
+        correctCount: s.correctCount + (isCorrect ? 1 : 0),
+        wrongCount: s.wrongCount + (isCorrect ? 0 : 1),
+      }));
+      // Refresh due count after scheduling
+      const count = await db.getReviewCount();
+      set({ dueCount: count });
+    } catch (e) {
+      console.error('submitAnswer 失败:', e);
+      // 不抛给 UI，避免卡死在加载态
+      set(s => ({ showResult: true, lastAttempt: null, correctCount: s.correctCount, wrongCount: s.wrongCount }));
     }
-
-    const reviewCard = toReviewCard(card, q);
-    await db.reviewCards.put(reviewCard);
-
-    set(s => ({
-      showResult: true,
-      lastAttempt: attempt,
-      correctCount: s.correctCount + (isCorrect ? 1 : 0),
-      wrongCount: s.wrongCount + (isCorrect ? 0 : 1),
-    }));
-    // Refresh due count after scheduling
-    const count = await db.getReviewCount();
-    set({ dueCount: count });
   },
 
   nextQuestion: () => {
@@ -238,23 +287,17 @@ export const useQuizStore = create<QuizStore>((set, get) => ({
   },
 
   submitReviewRating: async (rating: Grade) => {
-    const { reviewCards, reviewIndex, questions } = get();
-    if (reviewIndex >= reviewCards.length) return;
-    const card = reviewCards[reviewIndex];
-    const q = questions.find(q => q.id === card.questionId);
-    if (!q) return;
+    try {
+      const { reviewCards, reviewIndex, questions } = get();
+      if (reviewIndex >= reviewCards.length) return;
+      const card = reviewCards[reviewIndex];
+      const q = questions.find(q => q.id === card.questionId);
+      if (!q) return;
 
-    const existing = await db.reviewCards.where('questionId').equals(q.id).first();
+      const existing = await db.reviewCards.where('questionId').equals(q.id).first();
     let fsrsCard: Card;
     if (existing) {
-      fsrsCard = {
-        due: new Date(existing.due), stability: existing.stability,
-        difficulty: existing.difficulty, elapsed_days: existing.elapsed_days,
-        scheduled_days: existing.scheduled_days, reps: existing.reps,
-        lapses: existing.lapses,
-        state: existing.state as unknown as Card['state'],
-        last_review: existing.lastReview ? new Date(existing.lastReview) : null,
-      } as Card;
+      fsrsCard = fsrsCardFromReview(existing);
     } else {
       fsrsCard = createEmptyCard();
     }
@@ -276,11 +319,18 @@ export const useQuizStore = create<QuizStore>((set, get) => ({
     // Refresh due count after review rating
     const newCount = await db.getReviewCount();
     set({ dueCount: newCount });
+    } catch (e) {
+      console.error('submitReviewRating 失败:', e);
+    }
   },
 
   refreshDueCount: async () => {
-    const count = await db.getReviewCount();
-    set({ dueCount: count });
+    try {
+      const count = await db.getReviewCount();
+      set({ dueCount: count });
+    } catch (e) {
+      console.error('refreshDueCount 失败:', e);
+    }
   },
 }));
 
@@ -316,9 +366,8 @@ export async function syncSubjectProgress(subject: SubjectKey) {
     if (a.isCorrect) chapterStats[ch].correct++;
   }
 
-  // 更新 Zustand store
+  // 更新 Zustand store（totalMinutes 由学习计时器维护，不做答题时长估计，避免重复累计/双重计费）
   const today = new Date().toISOString().slice(0, 10);
-  const totalMinutes = progress.totalMinutes + Math.round(attempts.length * 1.5); // estimate 1.5 min per question
 
   const existingChapters = new Map((progress.chapterDetails || []).map(c => [c.name, c]));
 
@@ -336,7 +385,6 @@ export async function syncSubjectProgress(subject: SubjectKey) {
         // updateChapterMastery handles the update, but we also want to bump reviewDate
         storeState.updateSubjectProgress(subject, {
           lastStudyDate: today,
-          totalMinutes,
         });
       }
     }
@@ -351,6 +399,5 @@ export async function syncSubjectProgress(subject: SubjectKey) {
 
   storeState.updateSubjectProgress(subject, {
     lastStudyDate: today,
-    totalMinutes,
   });
 }

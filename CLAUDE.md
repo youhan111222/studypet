@@ -1,7 +1,7 @@
 # StudyPet — AI 专升本备考助手
 
 ## 项目概述
-React + TypeScript + Zustand 前端项目，宠兽养成×学习管理。本地开发服务端口 19998，AI 教练服务端口 19999。
+React + TypeScript + Zustand 前端项目，宠兽养成×学习管理。本地开发服务端口 19998（API + AI 教练），5173（Vite）。
 
 ## 用户身份
 专升本考生，备考科目：英语、高数、政治、电子技术。
@@ -11,10 +11,11 @@ React + TypeScript + Zustand 前端项目，宠兽养成×学习管理。本地�
 ## 核心技术规约（死律，每次修改必须遵守）
 
 ### 后端规范
-- 所有 API 必须经过 `api_server.py` 的统一路由，禁止在 `deepseek_service.py` 中暴露新端口给前端直调
+- 所有 API 必须经过 `api_server.py` 的统一路由（含 AI 教练 `/api/coach/chat`），禁止任何服务暴露新端口给前端直调
 - 所有数据库操作必须捕获 SQLite 异常（`sqlite3.Error`），禁止直接抛出裸异常
 - 异常信息写入 `api_error.log`，前端只返回 `{"error": "服务器内部错误"}` 不泄露堆栈
-- 端口分配：19998（API）、19999（AI Coach），禁止随意新增端口
+- 端口分配：19998（API + AI Coach）、5173（Vite），禁止随意新增端口
+- AI 教练系统提示词统一由 `api_server.py` 的 `build_system_prompt()` 生成（含考纲/知识库/决策矩阵），勿另起服务重复实现
 
 ### 前端规范
 - 宽度调整组件严格限制在 380px-700px 之间
@@ -42,11 +43,11 @@ React + TypeScript + Zustand 前端项目，宠兽养成×学习管理。本地�
 ### 2. 获取真实数据
 调用 AI 教练 API 获取当前状态：
 ```bash
-curl -s http://127.0.0.1:19999/api/coach/chat \
+curl -s http://127.0.0.1:19998/api/coach/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"[用户的提问原文，不要改写]","context":{}}'
 ```
-API 返回 `{"reply": "..."}` 就是你该参考的教练回复。你可以在此基础上扩展。
+API 返回 `{"response": "..."}` 就是你该参考的教练回复。你可以在此基础上扩展。
 
 ### 3. 教练风格
 - 先看数据再说话，不能胡说
@@ -56,6 +57,6 @@ API 返回 `{"reply": "..."}` 就是你该参考的教练回复。你可以在�
 
 ### 4. 项目文件速查
 - 任务/进度数据：`src/store/useStore.ts`（Zustand persist）
-- AI 教练服务：`deepseek_service.py`（Flask, 端口 19999）
+- AI 教练服务：`api_server.py`（`/api/coach/chat`，完整提示词在 `build_system_prompt()`）
 - 分析面板：`src/components/AnalyticsPanel.tsx`
-- 课程表：`src/store/scheduleData.ts`
+- 课程表：`src/store/scheduleData.ts`（或 XLS 解析产物）

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuizStore, syncSubjectProgress } from '../store/quizStore';
+import { db } from '../db';
 import type { SubjectKey, ErrorTag } from '../types';
 
 const SUBJECT_NAMES: Record<string, string> = {
@@ -21,7 +22,11 @@ export function QuizPanel() {
   const [quizDone, setQuizDone] = useState(false);
 
   useEffect(() => {
-    if (subject) loadQuestions(subject as SubjectKey);
+    if (subject) {
+      loadQuestions(subject as SubjectKey);
+      // 数据治理：每次进入刷题页清理 90 天前答题记录 + AI 题数量上限（幂等）
+      db.cleanupOldData().catch(() => {});
+    }
   }, [subject]);
 
   const advance = async () => {

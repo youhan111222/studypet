@@ -10,6 +10,13 @@ const RATING_LABELS: Record<number, { label: string; color: string; desc: string
   [Rating.Easy]: { label: '很简单', color: '#3498db', desc: '轻松答对' },
 };
 
+const ratingColorClass: Record<string, string> = {
+  '#e74c3c': 'text-[#e74c3c]',
+  '#f39c12': 'text-[#f39c12]',
+  '#2ecc71': 'text-[#2ecc71]',
+  '#3498db': 'text-[#3498db]',
+};
+
 export function ReviewPanel() {
   const navigate = useNavigate();
   const { reviewCards, reviewIndex, questions, loadDueReviews, submitReviewRating, nextReviewQuestion } = useQuizStore();
@@ -107,7 +114,7 @@ export function ReviewPanel() {
             <button key={rating} onClick={async () => { await submitReviewRating(rating as Grade); setRated(true); }}
               className="w-full p-3 rounded-lg text-left flex items-center justify-between transition-all bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-pop)]">
               <div>
-                <div className="text-sm font-bold" style={{ color: RATING_LABELS[rating].color }}>{RATING_LABELS[rating].label}</div>
+                <div className={`text-sm font-bold ${ratingColorClass[RATING_LABELS[rating].color]}`}>{RATING_LABELS[rating].label}</div>
                 <div className="text-xs text-[var(--text-muted)]">{RATING_LABELS[rating].desc}</div>
               </div>
             </button>

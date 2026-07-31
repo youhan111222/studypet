@@ -8,6 +8,12 @@ const periodConfig: Record<Period, { label: string; icon: string; color: string 
   evening: { label: '晚上', icon: '🌙', color: '#a855f7' },
 };
 
+const periodColorClass: Record<Period, string> = {
+  morning: 'text-[#ffaf4c]',
+  afternoon: 'text-[var(--blue)]',
+  evening: 'text-[var(--purple)]',
+};
+
 export function TaskList() {
   const tasks = useStore(s => s.tasks);
   const toggle = useStore(s => s.toggleTask);
@@ -104,7 +110,7 @@ export function TaskList() {
           const cfg = periodConfig[period];
           return (
             <div key={period}>
-              <div className="text-[12px] font-semibold mb-[8px] flex items-center gap-[6px]" style={{ color: cfg.color }}>
+              <div className={`text-[12px] font-semibold mb-[8px] flex items-center gap-[6px] ${periodColorClass[period]}`}>
                 <span>{cfg.icon}</span>{cfg.label}
               </div>
               <div className="flex flex-col gap-[6px]">
@@ -164,11 +170,7 @@ function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
   if (isChoice && optA && optB) {
     const picked = task.completed && chosen;
     return (
-      <div className="flex flex-col gap-[4px] p-[10px_14px] rounded-[8px] transition-[all_0.2s_ease] relative overflow-hidden" style={{
-        background: task.completed ? 'rgba(78,204,163,0.08)' : 'var(--bg-card)',
-        border: `1px solid ${task.completed ? 'rgba(78,204,163,0.2)' : 'var(--border)'}`,
-        opacity: task.completed ? 0.6 : 1,
-      }}>
+      <div className={`flex flex-col gap-[4px] p-[10px_14px] rounded-[8px] transition-[all_0.2s_ease] relative overflow-hidden border ${task.completed ? 'bg-[rgba(78,204,163,0.08)] border-[rgba(78,204,163,0.2)] opacity-60' : 'bg-[var(--bg-card)] border-[var(--border)] opacity-100'}`}>
         {/* 完成飘字动画 */}
         {floatAnim && (
           <span className="absolute right-[12px] top-[50%] text-[13px] font-bold text-[#4ecca3] animate-[float-up_0.8s_ease-out_forwards] pointer-events-none z-[10]">+50XP +10🪙</span>
@@ -184,33 +186,18 @@ function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
           const isPicked = picked === key;
           const otherPicked = picked && picked !== key;
           return (
-            <div key={key} onClick={() => !task.completed && handleChoice(key as 'A' | 'B')} className="flex items-center gap-[8px] p-[6px_10px] rounded-[6px]" style={{
-              background: isPicked ? 'rgba(78,204,163,0.12)' : 'var(--bg-input)',
-              border: `1px solid ${isPicked ? 'rgba(78,204,163,0.3)' : 'var(--border)'}`,
-              cursor: task.completed ? 'default' : 'pointer',
-              opacity: otherPicked ? 0.35 : 1,
-              textDecoration: otherPicked ? 'line-through' : 'none',
-            }}>
-              <div className="w-[16px] h-[16px] rounded-[50%] flex-shrink-0 flex items-center justify-center" style={{
-                border: `2px solid ${isPicked ? 'var(--accent)' : otherPicked ? 'var(--border)' : 'var(--text-muted)'}`,
-                background: isPicked ? 'var(--accent)' : 'transparent',
-              }}>
+            <div key={key} onClick={() => !task.completed && handleChoice(key as 'A' | 'B')} className={`flex items-center gap-[8px] p-[6px_10px] rounded-[6px] border ${isPicked ? 'bg-[rgba(78,204,163,0.12)] border-[rgba(78,204,163,0.3)]' : 'bg-[var(--bg-input)] border-[var(--border)]'} ${task.completed ? 'cursor-default' : 'cursor-pointer'} ${otherPicked ? 'opacity-35 line-through' : 'opacity-100'}`}>
+              <div className={`w-[16px] h-[16px] rounded-full shrink-0 flex items-center justify-center border-2 ${isPicked ? 'border-[var(--accent)] bg-[var(--accent)]' : otherPicked ? 'border-[var(--border)] bg-transparent' : 'border-[var(--text-muted)] bg-transparent'}`}>
                 {isPicked && <span className="text-[#fff] text-[9px]">✓</span>}
               </div>
-              <span className="text-[13px]" style={{
-                fontWeight: isPicked ? 600 : 400,
-                color: isPicked ? 'var(--accent)' : otherPicked ? 'var(--text-muted)' : 'var(--text-primary)',
-              }}>{label as string}</span>
+              <span className={`text-[13px] ${isPicked ? 'font-semibold text-[var(--accent)]' : otherPicked ? 'font-normal text-[var(--text-muted)]' : 'font-normal text-[var(--text-primary)]'}`}>{label as string}</span>
               {isPicked && <span className="text-[10px] text-[var(--accent)] ml-auto">已选</span>}
             </div>
           );
         })}
         <div className="flex gap-[4px] mt-[2px]">
           {task.tags.map(tag => (
-            <span key={tag} className="text-[10px] p-[2px_6px] rounded-[4px]" style={{
-              background: tag === 'DDL' ? 'rgba(233,69,96,0.15)' : 'rgba(10,132,255,0.15)',
-              color: tag === 'DDL' ? 'var(--red)' : 'var(--blue)',
-            }}>{tag}</span>
+            <span key={tag} className={`text-[10px] p-[2px_6px] rounded-[4px] ${tag === 'DDL' ? 'bg-[rgba(233,69,96,0.15)] text-[var(--red)]' : 'bg-[rgba(10,132,255,0.15)] text-[var(--blue)]'}`}>{tag}</span>
           ))}
           {task.deadline && <span className="text-[10px] text-[var(--red-soft)]">{task.deadline}</span>}
           <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="ml-auto p-[2px_6px] text-[10px] bg-[rgba(233,69,96,0.1)] text-[var(--red-soft)] border border-[rgba(233,69,96,0.2)] rounded-[4px]">删除</button>
@@ -220,23 +207,16 @@ function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
   }
 
   return (
-    <div className="flex items-center gap-[10px] p-[10px_14px] rounded-[8px] transition-[all_0.2s_ease] relative overflow-hidden" style={{
-      background: task.completed ? 'rgba(78,204,163,0.08)' : 'var(--bg-card)',
-      border: `1px solid ${task.completed ? 'rgba(78,204,163,0.2)' : 'var(--border)'}`,
-      opacity: task.completed ? 0.6 : 1,
-    }}>
+    <div className={`flex items-center gap-[10px] p-[10px_14px] rounded-[8px] transition-[all_0.2s_ease] relative overflow-hidden border ${task.completed ? 'bg-[rgba(78,204,163,0.08)] border-[rgba(78,204,163,0.2)] opacity-60' : 'bg-[var(--bg-card)] border-[var(--border)] opacity-100'}`}>
       {/* 完成飘字动画 */}
       {floatAnim && (
         <span className="absolute right-[12px] top-[50%] text-[13px] font-bold text-[#4ecca3] animate-[float-up_0.8s_ease-out_forwards] pointer-events-none z-[10]">+50XP +10🪙</span>
       )}
-      <div onClick={onToggle} className="w-[18px] h-[18px] rounded-[50%] flex items-center justify-center flex-shrink-0 cursor-pointer" style={{
-        border: `2px solid ${task.completed ? 'var(--accent)' : 'var(--border)'}`,
-        background: task.completed ? 'var(--accent)' : 'transparent',
-      }}>
+      <div onClick={onToggle} className={`w-[18px] h-[18px] rounded-full flex items-center justify-center shrink-0 cursor-pointer border-2 ${task.completed ? 'border-[var(--accent)] bg-[var(--accent)]' : 'border-[var(--border)] bg-transparent'}`}>
         {task.completed && <span className="text-[#fff] text-[10px]">✓</span>}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium" style={{ textDecoration: task.completed ? 'line-through' : 'none', color: task.completed ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+        <div className={`text-[13px] font-medium ${task.completed ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
           {task.title}
         </div>
         <div className="text-[11px] text-[var(--text-secondary)] flex gap-[8px] mt-[2px]">
@@ -246,10 +226,7 @@ function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
       </div>
       <div className="flex gap-[4px] flex-shrink-0">
         {task.tags.map(tag => (
-          <span key={tag} className="text-[10px] p-[2px_6px] rounded-[4px]" style={{
-            background: tag === 'DDL' ? 'rgba(233,69,96,0.15)' : tag === '小组' ? 'rgba(168,85,247,0.15)' : tag === '运动' ? 'rgba(78,204,163,0.15)' : 'rgba(10,132,255,0.15)',
-            color: tag === 'DDL' ? 'var(--red)' : tag === '小组' ? 'var(--purple)' : tag === '运动' ? 'var(--accent)' : 'var(--blue)',
-          }}>{tag}</span>
+          <span key={tag} className={`text-[10px] p-[2px_6px] rounded-[4px] ${tag === 'DDL' ? 'bg-[rgba(233,69,96,0.15)] text-[var(--red)]' : tag === '小组' ? 'bg-[rgba(168,85,247,0.15)] text-[var(--purple)]' : tag === '运动' ? 'bg-[rgba(78,204,163,0.15)] text-[var(--accent)]' : 'bg-[rgba(10,132,255,0.15)] text-[var(--blue)]'}`}>{tag}</span>
         ))}
       </div>
       {task.deadline && <span className="text-[10px] text-[var(--red-soft)] flex-shrink-0">{task.deadline}</span>}

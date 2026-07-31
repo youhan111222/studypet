@@ -20,3 +20,6 @@ api_key.txt
 tsconfig.tsbuildinfo
 .DS_Store
 *.log
+
+tracker.lock
+*.lock

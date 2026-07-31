@@ -3,6 +3,13 @@ import { useStore } from '../store/useStore';
 import { useQuizStore } from '../store/quizStore';
 import { useEffect } from 'react';
 
+const metricColorClass: Record<string, string> = {
+  '#ff8c00': 'text-[var(--orange)]',
+  '#4ecca3': 'text-[var(--accent)]',
+  '#e74c3c': 'text-[#e74c3c]',
+  '#2ecc71': 'text-[#2ecc71]',
+};
+
 const navItems = [
   { id: 'dashboard', path: '/', label: '学习概览', icon: '🏠' },
   { id: 'quiz', path: '/quiz/electronics', label: '刷题', icon: '📝' },
@@ -74,7 +81,7 @@ export function Sidebar() {
             <span className="text-[14px]">{item.icon}</span>
             <div>
               <div className="text-[10px] text-[var(--text-muted)]">{item.label}</div>
-              <div className="text-[12px] font-semibold" style={{ color: item.color }}>{item.value}</div>
+              <div className={`text-[12px] font-semibold ${metricColorClass[item.color]}`}>{item.value}</div>
             </div>
           </div>
         ))}
@@ -84,11 +91,7 @@ export function Sidebar() {
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="flex flex-col gap-[4px]">
           {navItems.map(v => (
-            <button key={v.id} onClick={() => navigate(v.path)} className="p-[7px_12px] rounded-[6px] text-left text-[12px] font-medium cursor-pointer transition-all hover:bg-[#20263d]" style={{
-              background: isActive(v.path) ? 'var(--accent-dim)' : undefined,
-              color: isActive(v.path) ? 'var(--accent)' : 'var(--text-secondary)',
-              border: isActive(v.path) ? '1px solid var(--accent)' : '1px solid transparent',
-            }}>
+            <button key={v.id} onClick={() => navigate(v.path)} className={`p-[7px_12px] rounded-[6px] text-left text-[12px] font-medium cursor-pointer transition-all hover:bg-[#20263d] border ${isActive(v.path) ? 'bg-[var(--accent-dim)] text-[var(--accent)] border-[var(--accent)]' : 'text-[var(--text-secondary)] border-transparent'}`}>
               {v.icon} {v.label}
               {v.id === 'review' && dueCount > 0 && (
                 <span className="ml-[4px] p-[0_6px] rounded-[10px] bg-[#e74c3c] text-[#fff] text-[10px] font-bold">{dueCount}</span>
@@ -102,11 +105,9 @@ export function Sidebar() {
       <div className="border-t border-[var(--border)] pt-[8px] flex flex-col gap-[6px]">
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-[var(--text-secondary)]">🤖 自动规划</span>
-          <button onClick={toggleAutoPlan} className="w-[36px] h-[20px] rounded-[10px] border-none cursor-pointer relative" style={{
-            background: autoPlan ? 'var(--accent)' : 'var(--border)',
-          }}>
-            <div className="w-[16px] h-[16px] rounded-[50%] bg-[#fff] absolute top-[2px]" style={{
-              left: autoPlan ? 18 : 2, transition: 'left 0.2s',
+          <button onClick={toggleAutoPlan} className={`w-[36px] h-[20px] rounded-[10px] border-none cursor-pointer relative ${autoPlan ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'}`}>
+            <div className="w-[16px] h-[16px] rounded-full bg-[#fff] absolute top-[2px] transition-[left] duration-200" style={{
+              left: autoPlan ? 18 : 2,
             }} />
           </button>
         </div>

@@ -33,7 +33,7 @@ export class StudyPetDB extends Dexie {
       .toArray();
   }
 
-  async getDueReviews(limit = 50) {
+  async getDueReviews(limit = 500) {
     // Include cards due today or past due (24-hour window)
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
@@ -49,6 +49,25 @@ export class StudyPetDB extends Dexie {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
     return this.reviewCards.where('due').belowOrEqual(todayEnd.toISOString()).count();
+  }
+
+  // ---- 数据清理（防止 IndexedDB 无限膨胀） ----
+
+  /** 清理旧答题记录（默认保留 90 天），并限制 AI 生成题数量（保留最新 N 道） */
+  async cleanupOldData(keepDays = 90, maxAiQuestions = 500) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - keepDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    await this.attempts.where('date').below(cutoffStr).delete();
+
+    const aiQuestions = (await this.questions.toArray()).filter(q => q.source === 'ai');
+    if (aiQuestions.length > maxAiQuestions) {
+      const toDelete = aiQuestions
+        .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+        .slice(0, aiQuestions.length - maxAiQuestions)
+        .map(q => q.id);
+      await this.questions.bulkDelete(toDelete);
+    }
   }
 
   // ---- 统计查询 ----

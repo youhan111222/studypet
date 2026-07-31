@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import type { ActivityLog, MasteryLevel, SubjectKey } from '../types';
-import { hexToRgb } from '../utils';
+import { hexToRgb, inferSubjectFromTitle } from '../utils';
 import { API } from '../config';
 
 interface RawHistoryItem {
@@ -11,6 +11,14 @@ interface RawHistoryItem {
   start_time: string;
   duration_seconds: number;
   date: string;
+}
+
+/** 本地时区 YYYY-MM-DD */
+function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 interface SubjectStats {
@@ -29,23 +37,13 @@ interface TimeSlotStats {
   efficiency: number; // 0-100
 }
 
-// ====== 科目关键词映射 —— 从任务标题推断科目 ======
+// ====== 科目元数据（名称/颜色；关键词推断统一走 utils.inferSubjectFromTitle） ======
 const SUBJECT_KEYWORDS: Record<SubjectKey, { name: string; keywords: string[]; color: string }> = {
   english: { name: '英语', keywords: ['英语', '英文', '单词', '阅读', '语法', '作文', '翻译', '听力'], color: '#0a84ff' },
   math: { name: '高数', keywords: ['高数', '数学', '微积分', '线代', '线性代数', '概率', '方程', '函数', '极限', '导数', '积分'], color: '#ff6b6b' },
   politics: { name: '政治', keywords: ['政治', '马原', '毛概', '思修', '近代史', '时政', '唯物', '辩证法'], color: '#ffa726' },
   electronics: { name: '电子技术', keywords: ['电子', '电路', '模电', '数电', '信号', '单片机', '通信', '三极管', '放大器', '嵌入式'], color: '#a855f7' },
 };
-
-function inferSubject(title: string): SubjectKey | null {
-  const t = title.toLowerCase();
-  for (const [key, cfg] of Object.entries(SUBJECT_KEYWORDS)) {
-    if (cfg.keywords.some(kw => t.includes(kw.toLowerCase()))) {
-      return key as SubjectKey;
-    }
-  }
-  return null;
-}
 
 // ====== 计算公式说明（展示用） ======
 const FORMULAS = {
@@ -55,6 +53,12 @@ const FORMULAS = {
   lowEfficiency: '低效时段 = 基于用户自身效率分布的百分位检测（低于P25且活跃>20min）',
   comparison: '对比基准 = 你上周同期数据',
 };
+
+// ====== 卡片通用样式 ======
+const CARD_CLS = 'p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]';
+const CARD_HEAD_CLS = 'flex justify-between items-center mb-3';
+const FORMULA_BADGE_CLS = 'text-[10px] text-[var(--text-muted)] bg-[var(--bg-tertiary)] p-[2px_6px] rounded';
+const RED_TEXT = 'text-[#ef5350]';
 
 export function AnalyticsPanel() {
   const activityLogs = useStore(s => s.activityLogs);
@@ -69,10 +73,11 @@ export function AnalyticsPanel() {
 
   // 从 Patina API（首选）或 tracker.py（回退）拉取历史数据
   useEffect(() => {
+    const controller = new AbortController();
     const fetchHistory = async () => {
       // 优先用 Patina 数据
       try {
-        const pres = await fetch(`${API}/patina/history?days=14`);
+        const pres = await fetch(`${API}/patina/history?days=14`, { signal: controller.signal });
         if (pres.ok) {
           const raw: RawHistoryItem[] = await pres.json();
           if (raw.length > 0) {
@@ -94,7 +99,7 @@ export function AnalyticsPanel() {
 
       // 回退：tracker.py 数据
       try {
-        const res = await fetch(`${API}/activity/history?days=14`);
+        const res = await fetch(`${API}/activity/history?days=14`, { signal: controller.signal });
         const raw: RawHistoryItem[] = await res.json();
         if (raw.length > 0) {
           setUseRealData(true);
@@ -113,16 +118,18 @@ export function AnalyticsPanel() {
       } catch {}
 
       // 最后回退到 store 数据
-      const today = new Date().toISOString().slice(0, 10);
-      const recentLogs = activityLogs.filter(l => l.date !== today).slice(-14);
+      const cutoff = localDateStr(new Date(Date.now() - 13 * 86400000));
+      const recentLogs = activityLogs.filter(l => l.date >= cutoff);
       if (recentLogs.length > 0) processLogs(recentLogs.map(l => ({ ...l, windowTitle: l.appName })));
     };
     fetchHistory();
-  }, [activityLogs]);
+    return () => controller.abort();
+  }, []);
 
   const processLogs = (logs: { appName: string; windowTitle: string; category: string; duration: number; date: string; startTime: string }[], raw?: RawHistoryItem[]) => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const recentLogs = logs.filter(l => l.date !== todayStr).slice(-14);
+    // 最近 14 天窗口（按日期过滤，不是按记录条数）
+    const cutoff = localDateStr(new Date(Date.now() - 13 * 86400000));
+    const recentLogs = logs.filter(l => l.date >= cutoff);
 
     // ====== 科目投入计算 —— 从窗口标题 + 已完成任务双重推断 ======
     const subjectMap: Record<string, { key: SubjectKey; totalMin: number; days: Set<string> }> = {};
@@ -135,17 +142,17 @@ export function AnalyticsPanel() {
 
     // 方式1：从已完成任务的标题推断科目（权重高——用户主动标记的）
     tasks.filter(t => t.completed).forEach(task => {
-      const subject = inferSubject(task.title);
+      const subject = inferSubjectFromTitle(task.title);
       if (subject && task.duration > 0) {
         subjectMap[subject].totalMin += task.duration;
-        subjectMap[subject].days.add(task.date || todayStr);
+        subjectMap[subject].days.add(task.date || localDateStr(new Date()));
       }
     });
 
     // 方式2：从 tracker 窗口标题推断（补充——被动追踪的）
     recentLogs.forEach(log => {
       if (log.category !== 'study') return;
-      const subject = inferSubject(log.windowTitle);
+      const subject = inferSubjectFromTitle(log.windowTitle);
       if (subject) {
         subjectMap[subject].totalMin += log.duration;
         subjectMap[subject].days.add(log.date);
@@ -163,7 +170,7 @@ export function AnalyticsPanel() {
     allKeys.forEach(k => { rawStudySessions[k] = []; });
     raw?.forEach((r: RawHistoryItem) => {
       if (r.category !== 'study') return;
-      const subject = inferSubject(r.window_title);
+      const subject = inferSubjectFromTitle(r.window_title);
       if (subject && r.duration_seconds > 0) {
         rawStudySessions[subject].push(r.duration_seconds / 60); // 转为分钟
       }
@@ -265,7 +272,7 @@ export function AnalyticsPanel() {
       allKeys.forEach(k => { lastWeekSubjectMap[k] = 0; });
       
       lastWeekLogs.forEach(log => {
-        const subject = inferSubject(log.windowTitle);
+        const subject = inferSubjectFromTitle(log.windowTitle);
         if (subject) lastWeekSubjectMap[subject] += log.duration;
       });
       
@@ -305,25 +312,17 @@ export function AnalyticsPanel() {
   const getSubjectColor = (key: SubjectKey) => SUBJECT_KEYWORDS[key]?.color || '#888';
 
   return (
-    <div style={{
-      padding: 20, height: '100%', overflowY: 'auto',
-      background: 'var(--bg-primary)', color: 'var(--text-primary)',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+    <div className="p-5 h-full overflow-y-auto bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      <div className="flex justify-between items-center mb-5">
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>学习行为深度分析</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+          <h2 className="text-xl font-bold m-0">学习行为深度分析</h2>
+          <p className="text-xs text-[var(--text-secondary)] mt-1">
             基于过去14天数据，识别无效努力时段与优化方向
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           {(['overview', 'subject', 'time', 'compare', 'knowledge'] as const).map(v => (
-            <button key={v} onClick={() => setView(v)} style={{
-              padding: '6px 14px', borderRadius: 6,
-              background: view === v ? 'var(--accent)' : 'var(--bg-tertiary)',
-              color: view === v ? '#000' : 'var(--text-secondary)',
-              fontSize: 12, border: '1px solid var(--border)',
-            }}>
+            <button key={v} onClick={() => setView(v)} className={`p-[6px_14px] rounded-[6px] text-xs border border-[var(--border)] ${view === v ? 'bg-[var(--accent)] text-[#000]' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'}`}>
               {v === 'overview' ? '概览' : v === 'subject' ? '科目' : v === 'time' ? '时段' : v === 'compare' ? '对比' : '知识'}
             </button>
           ))}
@@ -331,28 +330,25 @@ export function AnalyticsPanel() {
       </div>
 
       {view === 'overview' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div style={{
-            padding: 16, borderRadius: 12, background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>📊 科目投入分布</h3>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: 4 }}>
+        <div className="grid grid-cols-2 gap-4">
+          <div className={CARD_CLS}>
+            <div className={CARD_HEAD_CLS}>
+              <h3 className="text-sm font-semibold m-0">📊 科目投入分布</h3>
+              <div className={FORMULA_BADGE_CLS}>
                 {FORMULAS.subjectHours}
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="flex flex-col gap-[10px]">
               {subjectStats.map(s => (
-                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 80, fontSize: 12, color: getSubjectColor(s.key), fontWeight: 500 }}>{s.name}</div>
-                  <div style={{ flex: 1, height: 8, background: 'var(--bg-tertiary)', borderRadius: 4 }}>
-                    <div style={{
-                      width: `${Math.min(100, s.totalHours * 10)}%`, height: '100%',
-                      background: getSubjectColor(s.key), borderRadius: 4,
+                <div key={s.key} className="flex items-center gap-[10px]">
+                  <div className="w-20 text-xs font-medium" style={{ color: getSubjectColor(s.key) }}>{s.name}</div>
+                  <div className="flex-1 h-2 bg-[var(--bg-tertiary)] rounded">
+                    <div className="h-full rounded" style={{
+                      width: `${Math.min(100, s.totalHours * 10)}%`,
+                      background: getSubjectColor(s.key),
                     }} />
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', width: 50, textAlign: 'right' }}>
+                  <div className="text-[11px] text-[var(--text-secondary)] w-[50px] text-right">
                     {s.totalHours.toFixed(1)}h
                   </div>
                 </div>
@@ -360,70 +356,58 @@ export function AnalyticsPanel() {
             </div>
           </div>
 
-          <div style={{
-            padding: 16, borderRadius: 12, background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>⏰ 低效时段识别</h3>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: 4 }}>
+          <div className={CARD_CLS}>
+            <div className={CARD_HEAD_CLS}>
+              <h3 className="text-sm font-semibold m-0">⏰ 低效时段识别</h3>
+              <div className={FORMULA_BADGE_CLS}>
                 {FORMULAS.lowEfficiency}
               </div>
             </div>
             {lowEfficiencyHours.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>
+              <div className="text-xs text-[var(--text-secondary)] text-center p-5">
                 未检测到明显低效时段 👍
               </div>
             ) : (
               <div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  以下时段学习效率 <span style={{ color: '#ef5350' }}>低于30%</span>（娱乐占比过高）：
+                <div className="text-xs text-[var(--text-secondary)] mb-2">
+                  以下时段学习效率 <span className={RED_TEXT}>低于30%</span>（娱乐占比过高）：
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <div className="flex flex-wrap gap-[6px]">
                   {lowEfficiencyHours.map(h => (
-                    <div key={h} style={{
-                      padding: '6px 12px', borderRadius: 6,
-                      background: 'rgba(239,83,80,0.1)', border: '1px solid rgba(239,83,80,0.3)',
-                      color: '#ef5350', fontSize: 11,
-                    }}>
+                    <div key={h} className="p-[6px_12px] rounded-[6px] text-[11px] bg-[rgba(239,83,80,0.1)] border border-[rgba(239,83,80,0.3)] text-[#ef5350]">
                       {h}:00-{h + 1}:00
                     </div>
                   ))}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 12 }}>
+                <div className="text-[11px] text-[var(--text-secondary)] mt-3">
                   建议：在这些时段设置专注模式或安排轻松任务
                 </div>
               </div>
             )}
           </div>
 
-          <div style={{
-            padding: 16, borderRadius: 12, background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)', gridColumn: '1 / span 2',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>📈 效率趋势</h3>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: 4 }}>
+          <div className={`${CARD_CLS} col-span-2`}>
+            <div className={CARD_HEAD_CLS}>
+              <h3 className="text-sm font-semibold m-0">📈 效率趋势</h3>
+              <div className={FORMULA_BADGE_CLS}>
                 {FORMULAS.efficiency}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <div className="flex items-center gap-5">
               {timeStats.slice(8, 20).map(ts => (
-                <div key={ts.hour} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{ts.hour}:00</div>
-                  <div style={{ width: 20, height: 60, background: 'var(--bg-tertiary)', borderRadius: 4, position: 'relative' }}>
-                    <div style={{
-                      position: 'absolute', bottom: 0, left: 0, right: 0,
+                <div key={ts.hour} className="flex flex-col items-center gap-1">
+                  <div className="text-[10px] text-[var(--text-secondary)]">{ts.hour}:00</div>
+                  <div className="w-5 h-[60px] bg-[var(--bg-tertiary)] rounded relative">
+                    <div className="absolute bottom-0 left-0 right-0 rounded" style={{
                       height: `${Math.min(100, ts.studyMinutes * 2)}%`,
                       background: getEfficiencyColor(ts.efficiency),
-                      borderRadius: 4,
                     }} />
                   </div>
-                  <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>{ts.efficiency}%</div>
+                  <div className="text-[9px] text-[var(--text-muted)]">{ts.efficiency}%</div>
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 12 }}>
+            <div className="text-[11px] text-[var(--text-secondary)] mt-3">
               柱高=学习分钟数，颜色=学习效率（绿{'>'}70%，黄40-70%，红{'<'}40%）
             </div>
           </div>
@@ -431,36 +415,30 @@ export function AnalyticsPanel() {
       )}
 
       {view === 'subject' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="flex flex-col gap-4">
           {subjectStats.map(s => (
-            <div key={s.key} style={{
-              padding: 16, borderRadius: 12, background: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderLeft: `4px solid ${getSubjectColor(s.key)}`,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div key={s.key} className={CARD_CLS} style={{ borderLeft: `4px solid ${getSubjectColor(s.key)}` }}>
+              <div className="flex justify-between items-center">
                 <div>
-                  <h4 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: getSubjectColor(s.key) }}>{s.name}</h4>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  <h4 className="text-sm font-semibold m-0" style={{ color: getSubjectColor(s.key) }}>{s.name}</h4>
+                  <div className="text-[11px] text-[var(--text-secondary)] mt-1">
                     累计 {s.totalHours.toFixed(1)} 小时 · 日均 {s.avgPerDay.toFixed(1)} 小时
                   </div>
                 </div>
-                <div style={{
-                  padding: '4px 12px', borderRadius: 20,
+                <div className="p-[4px_12px] rounded-full text-xs font-semibold" style={{
                   background: `rgba(${hexToRgb(getEfficiencyColor(s.focusScore))},0.1)`,
                   color: getEfficiencyColor(s.focusScore),
-                  fontSize: 12, fontWeight: 600,
                 }}>
                   专注度 {s.focusScore}
                 </div>
               </div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, background: 'var(--bg-tertiary)', padding: '4px 8px', borderRadius: 4 }}>
+              <div className="text-[10px] text-[var(--text-muted)] mt-2 bg-[var(--bg-tertiary)] p-[4px_8px] rounded">
                 {FORMULAS.focusScore}
               </div>
               {s.lowEfficiencyPeriods.length > 0 && (
-                <div style={{ marginTop: 12, padding: 10, background: 'rgba(239,83,80,0.05)', borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, color: '#ef5350', fontWeight: 500 }}>⚠️ 需改进</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div className="mt-3 p-[10px] rounded-lg bg-[rgba(239,83,80,0.05)]">
+                  <div className="text-[11px] text-[#ef5350] font-medium">⚠️ 需改进</div>
+                  <div className="text-[11px] text-[var(--text-secondary)] mt-1">
                     {s.lowEfficiencyPeriods.join(' · ')}
                   </div>
                 </div>
@@ -471,29 +449,25 @@ export function AnalyticsPanel() {
       )}
 
       {view === 'time' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="grid grid-cols-2 gap-4">
           {timeStats.slice(8, 20).map(ts => (
-            <div key={ts.hour} style={{
-              padding: 12, borderRadius: 8, background: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{ts.hour}:00-{ts.hour + 1}:00</div>
-                <div style={{
-                  fontSize: 11, padding: '2px 8px', borderRadius: 4,
+            <div key={ts.hour} className="p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)]">
+              <div className="flex justify-between items-center">
+                <div className="text-[13px] font-semibold">{ts.hour}:00-{ts.hour + 1}:00</div>
+                <div className="p-[2px_8px] rounded text-[11px]" style={{
                   background: `rgba(${hexToRgb(getEfficiencyColor(ts.efficiency))},0.1)`,
                   color: getEfficiencyColor(ts.efficiency),
                 }}>
                   {ts.efficiency}% 效率
                 </div>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>
+              <div className="text-[11px] text-[var(--text-secondary)] mt-2">
                 学习 {ts.studyMinutes} 分钟 · 娱乐 {ts.entertainmentMinutes} 分钟
               </div>
-              <div style={{ marginTop: 8, height: 6, background: 'var(--bg-tertiary)', borderRadius: 3 }}>
-                <div style={{
-                  width: `${ts.efficiency}%`, height: '100%',
-                  background: getEfficiencyColor(ts.efficiency), borderRadius: 3,
+              <div className="mt-2 h-[6px] bg-[var(--bg-tertiary)] rounded-[3px]">
+                <div className="h-full rounded-[3px]" style={{
+                  width: `${ts.efficiency}%`,
+                  background: getEfficiencyColor(ts.efficiency),
                 }} />
               </div>
             </div>
@@ -502,53 +476,43 @@ export function AnalyticsPanel() {
       )}
 
       {view === 'compare' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{
-            padding: 16, borderRadius: 12, background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-          }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>📊 与上周对比</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="flex flex-col gap-4">
+          <div className={CARD_CLS}>
+            <h3 className="text-sm font-semibold mb-4">📊 与上周对比</h3>
+            <div className="flex flex-col gap-3">
               {peerComparison.map(p => {
                 const diff = p.you - p.avg;
                 const percent = Math.round((p.you / Math.max(p.avg, 0.1)) * 100);
+                const isUp = diff >= 0;
                 return (
-                  <div key={p.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 100, fontSize: 12 }}>{p.label}</div>
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ flex: 1, height: 8, background: 'var(--bg-tertiary)', borderRadius: 4 }}>
-                        <div style={{
-                          width: `${Math.min(100, percent)}%`, height: '100%',
-                          background: diff >= 0 ? '#4ecca3' : '#ef5350',
-                          borderRadius: 4,
+                  <div key={p.label} className="flex items-center gap-3">
+                    <div className="w-[100px] text-xs">{p.label}</div>
+                    <div className="flex-1 flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-[var(--bg-tertiary)] rounded">
+                        <div className="h-full rounded" style={{
+                          width: `${Math.min(100, percent)}%`,
+                          background: isUp ? '#4ecca3' : '#ef5350',
                         }} />
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', width: 40 }}>
+                      <div className="text-[11px] text-[var(--text-secondary)] w-10">
                         {typeof p.you === 'number' ? p.you.toFixed(1) : p.you}
                       </div>
                     </div>
-                    <div style={{
-                      fontSize: 10, padding: '2px 6px', borderRadius: 4,
-                      background: diff >= 0 ? 'rgba(78,204,163,0.1)' : 'rgba(239,83,80,0.1)',
-                      color: diff >= 0 ? '#4ecca3' : '#ef5350',
-                    }}>
-                      {diff >= 0 ? '+' : ''}{diff.toFixed(1)}
+                    <div className={`p-[2px_6px] rounded text-[10px] ${isUp ? 'bg-[rgba(78,204,163,0.1)] text-[#4ecca3]' : 'bg-[rgba(239,83,80,0.1)] text-[#ef5350]'}`}>
+                      {isUp ? '+' : ''}{diff.toFixed(1)}
                     </div>
                   </div>
                 );
               })}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 12 }}>
+            <div className="text-[11px] text-[var(--text-secondary)] mt-3">
               {FORMULAS.comparison} · 基于你最近14天的学习数据
             </div>
           </div>
 
-          <div style={{
-            padding: 16, borderRadius: 12, background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-          }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>💡 优化建议</h3>
-            <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          <div className={CARD_CLS}>
+            <h3 className="text-sm font-semibold mb-3">💡 优化建议</h3>
+            <ul className="m-0 pl-5 text-xs text-[var(--text-secondary)] leading-[1.6]">
               {lowEfficiencyHours.length > 0 && (
                 <li>在低效时段（{lowEfficiencyHours.map(h => `${h}:00`).join('、')}）开启专注模式，屏蔽娱乐应用</li>
               )}
@@ -584,7 +548,7 @@ function KnowledgeView() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className="flex flex-col gap-3">
       {/* 章节掌握状态 */}
       {(Object.keys(subjectProgress) as SubjectKey[]).map(subject => {
         const sp = subjectProgress[subject];
@@ -594,32 +558,25 @@ function KnowledgeView() {
         const pct = chapters.length > 0 ? Math.round((mastered / chapters.length) * 100) : 0;
 
         return (
-          <div key={subject} style={{
-            padding: 14, borderRadius: 12, background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{
-                  width: 10, height: 10, borderRadius: '50%',
-                  background: subjectColors[subject],
-                }} />
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{subjectNames[subject]}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          <div key={subject} className="p-[14px] rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
+            <div className="flex justify-between items-center mb-[10px]">
+              <div className="flex items-center gap-2">
+                <div className="w-[10px] h-[10px] rounded-full" style={{ background: subjectColors[subject] }} />
+                <span className="text-[13px] font-semibold">{subjectNames[subject]}</span>
+                <span className="text-[11px] text-[var(--text-muted)]">
                   {mastered}/{chapters.length} 章 · {pct}%
                 </span>
               </div>
             </div>
             {/* 进度条 */}
-            <div style={{ height: 6, background: 'var(--bg-tertiary)', borderRadius: 3, marginBottom: 8 }}>
-              <div style={{
-                width: `${pct}%`, height: '100%', borderRadius: 3,
+            <div className="h-[6px] bg-[var(--bg-tertiary)] rounded-[3px] mb-2">
+              <div className="h-full rounded-[3px] transition-[width] duration-300" style={{
+                width: `${pct}%`,
                 background: `linear-gradient(90deg, ${subjectColors[subject]}, #4ecca3)`,
-                transition: 'width 0.3s',
               }} />
             </div>
             {/* 章节标签 */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            <div className="flex flex-wrap gap-1">
               {chapters.slice(0, 12).map(c => (
                 <button
                   key={c.name}
@@ -628,19 +585,18 @@ function KnowledgeView() {
                     updateChapterMastery(subject, c.name, next[c.mastery] as MasteryLevel);
                   }}
                   title={`${c.name}: ${masteryLabels[c.mastery]} | 复习${c.reviewCount}次${c.nextReviewDate ? ' | 下次:' + c.nextReviewDate : ''}`}
+                  className="p-[3px_8px] rounded-[12px] text-[10px] cursor-pointer whitespace-nowrap"
                   style={{
-                    padding: '3px 8px', borderRadius: 12, fontSize: 10,
                     background: masteryColors[c.mastery] + '22',
                     border: `1px solid ${masteryColors[c.mastery]}44`,
                     color: masteryColors[c.mastery],
-                    cursor: 'pointer', whiteSpace: 'nowrap',
                   }}
                 >
                   {c.name}
                 </button>
               ))}
               {chapters.length === 0 && (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>暂无章节数据 · AI教练可标记章节掌握状态</span>
+                <span className="text-[11px] text-[var(--text-muted)]">暂无章节数据 · AI教练可标记章节掌握状态</span>
               )}
             </div>
           </div>
@@ -649,33 +605,23 @@ function KnowledgeView() {
 
       {/* 学习清单 */}
       {studyChecklists.length > 0 && (
-        <div style={{
-          padding: 14, borderRadius: 12, background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-        }}>
-          <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>📝 学习清单</h4>
+        <div className="p-[14px] rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
+          <h4 className="text-[13px] font-semibold mb-2">📝 学习清单</h4>
           {studyChecklists.slice(0, 5).map(cl => (
-            <div key={cl.id} style={{
-              padding: '8px 10px', borderRadius: 8, marginBottom: 6,
-              background: 'var(--bg-tertiary)', fontSize: 11,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontWeight: 500 }}>{cl.title}</span>
-                <span style={{
-                  padding: '1px 6px', borderRadius: 6, fontSize: 9,
-                  background: cl.type === 'execute' ? 'rgba(10,132,255,0.15)' : 'rgba(78,204,163,0.15)',
-                  color: cl.type === 'execute' ? '#0a84ff' : '#4ecca3',
-                }}>
+            <div key={cl.id} className="p-[8px_10px] rounded-lg mb-[6px] bg-[var(--bg-tertiary)] text-[11px]">
+              <div className="flex justify-between mb-1">
+                <span className="font-medium">{cl.title}</span>
+                <span className={`p-[1px_6px] rounded-[6px] text-[9px] ${cl.type === 'execute' ? 'bg-[rgba(10,132,255,0.15)] text-[#0a84ff]' : 'bg-[rgba(78,204,163,0.15)] text-[#4ecca3]'}`}>
                   {cl.type === 'execute' ? '执行' : '核查'}
                 </span>
               </div>
               {cl.items.slice(0, 5).map((item, i) => (
-                <div key={i} style={{ color: 'var(--text-secondary)', paddingLeft: 8 }}>
+                <div key={i} className="text-[var(--text-secondary)] pl-2">
                   {i + 1}. {item}
                 </div>
               ))}
               {cl.items.length > 5 && (
-                <div style={{ color: 'var(--text-muted)', paddingLeft: 8 }}>...共{cl.items.length}项</div>
+                <div className="text-[var(--text-muted)] pl-2">...共{cl.items.length}项</div>
               )}
             </div>
           ))}
@@ -684,21 +630,14 @@ function KnowledgeView() {
 
       {/* 刻意练习记录 */}
       {practiceLogs.length > 0 && (
-        <div style={{
-          padding: 14, borderRadius: 12, background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-        }}>
-          <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>🎯 刻意练习记录</h4>
+        <div className="p-[14px] rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
+          <h4 className="text-[13px] font-semibold mb-2">🎯 刻意练习记录</h4>
           {practiceLogs.slice(-5).reverse().map(pl => (
-            <div key={pl.id} style={{
-              padding: '6px 10px', borderRadius: 6, marginBottom: 4,
-              background: 'var(--bg-tertiary)', fontSize: 11,
-              borderLeft: `3px solid ${subjectColors[pl.subject] || '#666'}`,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div key={pl.id} className="p-[6px_10px] rounded-[6px] mb-1 bg-[var(--bg-tertiary)] text-[11px]" style={{ borderLeft: `3px solid ${subjectColors[pl.subject] || '#666'}` }}>
+              <div className="flex justify-between">
                 <span>{pl.date} · {subjectNames[pl.subject]} · {pl.chapter}</span>
               </div>
-              <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>
+              <div className="text-[var(--text-secondary)] mt-[2px]">
                 结果: {pl.result} | 下一步: {pl.nextAction}
               </div>
             </div>

@@ -5,9 +5,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // AI Coach (deepseek_service.py :19999) — 独立路径，重写后带 /api/coach 前缀
+      // AI Coach（统一走 api_server.py :19998，重写后带 /api/coach 前缀）
       '/coach': {
-        target: 'http://127.0.0.1:19999',
+        target: 'http://127.0.0.1:19998',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/coach/, '/api/coach'),
       },
@@ -21,6 +21,11 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/search': {
+        target: 'http://127.0.0.1:19998',
+        changeOrigin: true,
+      },
+      // SecondBrain (api_server.py :19998，契约 v1)
+      '/secondbrain': {
         target: 'http://127.0.0.1:19998',
         changeOrigin: true,
       },

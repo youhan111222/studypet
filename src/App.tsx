@@ -26,10 +26,10 @@ export default function App() {
   const coachOpen = useStore(s => s.coachOpen);
   const toggleCoach = useStore(s => s.toggleCoach);
   const syncActivityLogs = useStore(s => s.syncActivityLogs);
-  const updateWeekStats = useStore(s => (updates: Partial<WeekStats>) => {
+  const updateWeekStats = useCallback((updates: Partial<WeekStats>) => {
     const state = useStore.getState();
     useStore.setState({ weekStats: { ...state.weekStats, ...updates } });
-  });
+  }, []);
 
   const [trackerStatus, setTrackerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [retryCount, setRetryCount] = useState(0);
@@ -104,21 +104,14 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <div className="flex-1 flex flex-col relative">
         <StudyTimer />
         {trackerStatus === 'offline' && (
-          <div style={{
-            background: '#f59e0b15', borderBottom: '1px solid #f59e0b40',
-            padding: '6px 16px', fontSize: 12, color: '#f59e0b',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
+          <div className="bg-[#f59e0b15] border-b border-[#f59e0b40] p-[6px_16px] text-[12px] text-[#f59e0b] flex items-center justify-between">
             <span>⚠ 屏幕时间追踪未启动 — 运行 <b>StudyPet_Launcher.ps1</b></span>
-            <button onClick={() => { setTrackerStatus('checking'); setRetryCount(0); }} style={{
-              padding: '2px 10px', borderRadius: 10, border: '1px solid #f59e0b60',
-              background: 'transparent', color: '#f59e0b', cursor: 'pointer', fontSize: 11,
-            }}>重试</button>
+            <button onClick={() => { setTrackerStatus('checking'); setRetryCount(0); }} className="p-[2px_10px] rounded-[10px] border border-[#f59e0b60] bg-transparent text-[#f59e0b] cursor-pointer text-[11px]">重试</button>
           </div>
         )}
 
@@ -139,27 +132,12 @@ export default function App() {
         {coachOpen ? (
           <CoachPanel />
         ) : (
-          <div onClick={toggleCoach} style={{
-            position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
-            maxWidth: 520, width: 'calc(100% - 48px)',
-            padding: '10px 16px', borderRadius: 20,
-            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
-            boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
-          }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #4ecca3, #0a84ff)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-              flexShrink: 0,
-            }}>🐱</div>
-            <div style={{
-              fontSize: 12, color: 'var(--text-secondary)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-            }}>
+          <div onClick={toggleCoach} className="absolute bottom-[16px] left-1/2 -translate-x-1/2 max-w-[520px] w-[calc(100%-48px)] p-[10px_16px] rounded-[20px] bg-[var(--bg-secondary)] border border-[var(--border)] cursor-pointer flex items-center gap-[10px] shadow-[0_2px_12px_rgba(0,0,0,0.3)]">
+            <div className="w-[32px] h-[32px] rounded-full bg-[linear-gradient(135deg,_#4ecca3,_#0a84ff)] flex items-center justify-center text-[16px] shrink-0">🐱</div>
+            <div className="text-[12px] text-[var(--text-secondary)] overflow-hidden text-ellipsis whitespace-nowrap flex-1">
               {lastMsg?.role === 'coach' ? lastMsg.content.slice(0, 50) + (lastMsg.content.length > 50 ? '...' : '') : '🤖 AI教练在线 · 点击对话'}
             </div>
-            <span style={{ fontSize: 14, color: 'var(--text-muted)', flexShrink: 0 }}>💬</span>
+            <span className="text-[14px] text-[var(--text-muted)] shrink-0">💬</span>
           </div>
         )}
       </div>

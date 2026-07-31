@@ -3,8 +3,12 @@ import { API } from '../config';
 
 const catMeta: Record<string, { label: string; color: string; icon: string }> = {
   study: { label: '学习', color: '#4ecca3', icon: '📖' },
+  dev: { label: '开发', color: '#61afef', icon: '💻' },
+  tools: { label: '工具', color: '#8a8a8a', icon: '🔧' },
+  system: { label: '系统', color: '#6b6b6b', icon: '🖥️' },
+  browser: { label: '浏览器', color: '#0a84ff', icon: '🌐' },
   entertainment: { label: '娱乐', color: '#ef5350', icon: '🎮' },
-  social: { label: '社交', color: '#0a84ff', icon: '💬' },
+  social: { label: '社交', color: '#ffa726', icon: '💬' },
   other: { label: '其他', color: '#9e9e9e', icon: '📂' },
 };
 
@@ -12,6 +16,11 @@ interface AppEntry { appName: string; category: string; duration: number; sessio
 interface StatsResponse { apps: AppEntry[]; categories: Record<string, number>; idleMinutes: number; totalActiveMinutes: number; date: string; }
 
 interface HourData { hour: number; active: number; idle: number; }
+
+// ====== 卡片通用样式 ======
+const CARD_CLS = 'p-4 rounded-[10px] bg-[var(--bg-card)] border border-[var(--border)]';
+const CARD_TITLE_CLS = 'text-[13px] font-semibold mb-3 shrink-0';
+const EMPTY_CLS = 'flex-1 flex items-center justify-center text-[var(--text-muted)] text-xs';
 
 export function ScreenTimePanel() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -66,7 +75,7 @@ export function ScreenTimePanel() {
 
   if (loading || !stats) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
+      <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] text-sm">
         {loading ? '加载中...' : '暂无屏幕时间数据，请确保 tracker.py 已启动'}
       </div>
     );
@@ -83,28 +92,25 @@ export function ScreenTimePanel() {
   const catEntries = Object.entries(stats.categories).sort((a, b) => b[1] - a[1]);
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px 28px', overflow: 'hidden' }}>
+    <div className="flex-1 flex flex-col p-[24px_28px] overflow-hidden">
       {/* 头部 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>屏幕使用时间</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+          <h2 className="text-[22px] font-bold m-0">屏幕使用时间</h2>
+          <p className="text-xs text-[var(--text-muted)] m-[4px_0_0]">
             {stats.date} · 每10秒自动刷新
           </p>
         </div>
-        <div style={{
-          padding: '10px 18px', borderRadius: 10, background: 'var(--bg-card)',
-          border: '1px solid var(--border)', textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
-            {Math.floor(totalAll / 60)}<span style={{ fontSize: 16 }}>h</span> {totalAll % 60}<span style={{ fontSize: 16 }}>m</span>
+        <div className="p-[10px_18px] rounded-[10px] bg-[var(--bg-card)] border border-[var(--border)] text-center">
+          <div className="text-[26px] font-extrabold text-[var(--text-primary)] leading-none">
+            {Math.floor(totalAll / 60)}<span className="text-base">h</span> {totalAll % 60}<span className="text-base">m</span>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>今日屏幕总时长</div>
+          <div className="text-[11px] text-[var(--text-muted)] mt-[2px]">今日屏幕总时长</div>
         </div>
       </div>
 
       {/* 三列概览 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 24 }}>
+      <div className="grid grid-cols-3 gap-[14px] mb-6">
         <MiniCard icon="⏱️" label="活跃时长" value={`${Math.floor(totalActive / 60)}h ${totalActive % 60}m`} color="#4ecca3" />
         <MiniCard icon="💤" label="空闲时长" value={`${Math.floor(idleMin / 60)}h ${idleMin % 60}m`} color="#9e9e9e" />
         <MiniCard
@@ -115,31 +121,31 @@ export function ScreenTimePanel() {
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div className="grid grid-cols-2 gap-[14px] flex-1 min-h-0 overflow-hidden">
         {/* 左列：分类占比 + 应用排行 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, overflow: 'hidden' }}>
+        <div className="flex flex-col gap-[14px] overflow-hidden">
           {/* 分类占比 */}
-          <div style={{ padding: 16, borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px', flexShrink: 0 }}>分类占比</h3>
+          <div className={`${CARD_CLS} flex-1 overflow-hidden flex flex-col`}>
+            <h3 className={CARD_TITLE_CLS}>分类占比</h3>
             {catEntries.length === 0 ? (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 12 }}>暂无数据</div>
+              <div className={EMPTY_CLS}>暂无数据</div>
             ) : (
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="flex-1 overflow-y-auto flex flex-col gap-2">
                 {catEntries.map(([cat, min]) => {
                   const meta = catMeta[cat] || { label: cat, color: '#9e9e9e', icon: '📌' };
                   const pct = totalActive > 0 ? Math.round((min / totalActive) * 100) : 0;
                   return (
                     <div key={cat}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                        <span style={{ fontSize: 12, fontWeight: 500 }}>{meta.icon} {meta.label}</span>
-                        <span style={{ fontSize: 12, color: meta.color, fontWeight: 600 }}>
+                      <div className="flex justify-between mb-[3px]">
+                        <span className="text-xs font-medium">{meta.icon} {meta.label}</span>
+                        <span className="text-xs font-semibold" style={{ color: meta.color }}>
                           {Math.floor(min / 60)}h {min % 60}m · {pct}%
                         </span>
                       </div>
-                      <div style={{ height: 6, background: 'var(--bg-tertiary)', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{
-                          width: `${pct}%`, height: '100%', background: meta.color, borderRadius: 3,
-                          transition: 'width 0.5s',
+                      <div className="h-[6px] bg-[var(--bg-tertiary)] rounded-[3px] overflow-hidden">
+                        <div className="h-full rounded-[3px] transition-[width] duration-500" style={{
+                          width: `${pct}%`,
+                          background: meta.color,
                         }} />
                       </div>
                     </div>
@@ -151,38 +157,35 @@ export function ScreenTimePanel() {
         </div>
 
         {/* 右列：应用排行 */}
-        <div style={{ padding: 16, borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px', flexShrink: 0 }}>应用排行 Top 10</h3>
+        <div className={`${CARD_CLS} overflow-hidden flex flex-col`}>
+          <h3 className={CARD_TITLE_CLS}>应用排行 Top 10</h3>
           {sortedApps.length === 0 ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 12 }}>暂无数据</div>
+            <div className={EMPTY_CLS}>暂无数据</div>
           ) : (
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className="flex-1 overflow-y-auto flex flex-col gap-1">
               {sortedApps.slice(0, 10).map((app, i) => {
                 const meta = catMeta[app.category] || { color: '#9e9e9e' };
                 const pct = totalActive > 0 ? Math.round((app.duration / totalActive) * 100) : 0;
                 return (
-                  <div key={app.appName} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '6px 10px', borderRadius: 6,
-                    background: i % 2 === 0 ? 'var(--bg-secondary)' : 'transparent',
-                  }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 20, flexShrink: 0 }}>
+                  <div key={app.appName} className={`flex items-center gap-2 p-[6px_10px] rounded-[6px] ${i % 2 === 0 ? 'bg-[var(--bg-secondary)]' : 'bg-transparent'}`}>
+                    <span className="text-[11px] text-[var(--text-muted)] w-5 shrink-0">
                       {i + 1}
                     </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium overflow-hidden text-ellipsis whitespace-nowrap">
                         {app.appName}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                        <div style={{ flex: 1, height: 3, background: 'var(--bg-tertiary)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{
-                            width: `${pct}%`, height: '100%', background: meta.color, borderRadius: 2, transition: 'width 0.5s',
+                      <div className="flex items-center gap-[6px] mt-[2px]">
+                        <div className="flex-1 h-[3px] bg-[var(--bg-tertiary)] rounded-[2px] overflow-hidden">
+                          <div className="h-full rounded-[2px] transition-[width] duration-500" style={{
+                            width: `${pct}%`,
+                            background: meta.color,
                           }} />
                         </div>
-                        <span style={{ fontSize: 9, color: 'var(--text-muted)', flexShrink: 0 }}>{pct}%</span>
+                        <span className="text-[9px] text-[var(--text-muted)] shrink-0">{pct}%</span>
                       </div>
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: meta.color, flexShrink: 0 }}>
+                    <span className="text-[11px] font-semibold shrink-0" style={{ color: meta.color }}>
                       {Math.floor(app.duration / 60)}h {app.duration % 60}m
                     </span>
                   </div>
@@ -194,11 +197,11 @@ export function ScreenTimePanel() {
       </div>
 
       {/* 底部：过去7天趋势 + 今日时段 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
+      <div className="grid grid-cols-2 gap-[14px] mt-[14px]">
         {/* 过去7天趋势 */}
-        <div style={{ padding: 14, borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>过去7天屏幕时间</h3>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 80 }}>
+        <div className="p-[14px] rounded-[10px] bg-[var(--bg-card)] border border-[var(--border)]">
+          <h3 className="text-[13px] font-semibold mb-[10px]">过去7天屏幕时间</h3>
+          <div className="flex items-end gap-2 h-20">
             {history.map((min, i) => {
               const h = Math.round((min / maxDay) * 100);
               const today = new Date();
@@ -207,16 +210,12 @@ export function ScreenTimePanel() {
               const isToday = i === 6;
               const dayLabels = ['日', '一', '二', '三', '四', '五', '六'];
               return (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                  <span style={{ fontSize: 9, color: isToday ? 'var(--accent)' : 'var(--text-muted)', fontWeight: isToday ? 700 : 400 }}>
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <span className={`text-[9px] ${isToday ? 'text-[var(--accent)] font-bold' : 'text-[var(--text-muted)] font-normal'}`}>
                     {Math.floor(min / 60)}h
                   </span>
-                  <div style={{
-                    width: '100%', height: `${Math.max(4, h)}%`, borderRadius: 4,
-                    background: isToday ? 'var(--accent)' : 'var(--bg-tertiary)',
-                    minHeight: 4, transition: 'height 0.5s',
-                  }} />
-                  <span style={{ fontSize: 9, color: isToday ? 'var(--accent)' : 'var(--text-muted)', fontWeight: isToday ? 600 : 400 }}>
+                  <div className={`w-full rounded min-h-[4px] transition-[height] duration-500 ${isToday ? 'bg-[var(--accent)]' : 'bg-[var(--bg-tertiary)]'}`} style={{ height: `${Math.max(4, h)}%` }} />
+                  <span className={`text-[9px] ${isToday ? 'text-[var(--accent)] font-semibold' : 'text-[var(--text-muted)] font-normal'}`}>
                     {dayLabels[d.getDay()]}
                   </span>
                 </div>
@@ -226,24 +225,19 @@ export function ScreenTimePanel() {
         </div>
 
         {/* 今日时段分布 */}
-        <div style={{ padding: 14, borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>今日时段分布</h3>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 80 }}>
+        <div className="p-[14px] rounded-[10px] bg-[var(--bg-card)] border border-[var(--border)]">
+          <h3 className="text-[13px] font-semibold mb-[10px]">今日时段分布</h3>
+          <div className="flex items-end gap-[2px] h-20">
             {hourly.map(h => {
               const pct = maxHour > 0 ? (h.active / maxHour) * 100 : 0;
               const now = new Date().getHours();
               const isNow = h.hour === now;
               return (
-                <div key={h.hour} style={{
-                  flex: 1, height: `${Math.max(4, pct)}%`, borderRadius: 2,
-                  background: isNow ? 'var(--accent)' : '#4ecca3',
-                  minHeight: 2, opacity: isNow ? 1 : 0.5, transition: 'height 0.5s',
-                  position: 'relative',
-                }} title={`${h.hour}:00 - ${Math.floor(h.active / 60)}h ${h.active % 60}m`} />
+                <div key={h.hour} className={`flex-1 rounded-[2px] min-h-[2px] relative transition-[height] duration-500 ${isNow ? 'bg-[var(--accent)] opacity-100' : 'bg-[#4ecca3] opacity-50'}`} style={{ height: `${Math.max(4, pct)}%` }} title={`${h.hour}:00 - ${Math.floor(h.active / 60)}h ${h.active % 60}m`} />
               );
             })}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 9, color: 'var(--text-muted)' }}>
+          <div className="flex justify-between mt-1 text-[9px] text-[var(--text-muted)]">
             <span>0时</span><span>6时</span><span>12时</span><span>18时</span><span>23时</span>
           </div>
         </div>
@@ -254,11 +248,11 @@ export function ScreenTimePanel() {
 
 function MiniCard({ icon, label, value, color }: { icon: string; label: string; value: string; color: string }) {
   return (
-    <div style={{ padding: '14px 16px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
-      <div style={{ fontSize: 22, flexShrink: 0 }}>{icon}</div>
+    <div className="p-[14px_16px] rounded-[10px] bg-[var(--bg-card)] border border-[var(--border)] flex items-center gap-3">
+      <div className="text-[22px] shrink-0">{icon}</div>
       <div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</div>
-        <div style={{ fontSize: 16, fontWeight: 700, color }}>{value}</div>
+        <div className="text-[11px] text-[var(--text-muted)]">{label}</div>
+        <div className="text-base font-bold" style={{ color }}>{value}</div>
       </div>
     </div>
   );

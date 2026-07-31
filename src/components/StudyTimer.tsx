@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import type { SubjectKey } from '../types';
 
@@ -7,6 +7,13 @@ const SUBJECT_META: Record<SubjectKey, { label: string; icon: string; color: str
   math: { label: '高数', icon: '📐', color: '#ff6b6b' },
   politics: { label: '政治', icon: '📖', color: '#ffa726' },
   electronics: { label: '电子', icon: '⚡', color: '#a855f7' },
+};
+
+const subjectCls: Record<SubjectKey, { text: string; chipBg: string; chipBorder: string; btnBg: string }> = {
+  english: { text: 'text-[var(--blue)]', chipBg: 'bg-[#0a84ff20]', chipBorder: 'border-[#0a84ff]', btnBg: 'bg-[var(--blue)]' },
+  math: { text: 'text-[#ff6b6b]', chipBg: 'bg-[#ff6b6b20]', chipBorder: 'border-[#ff6b6b]', btnBg: 'bg-[#ff6b6b]' },
+  politics: { text: 'text-[#ffa726]', chipBg: 'bg-[#ffa72620]', chipBorder: 'border-[#ffa726]', btnBg: 'bg-[#ffa726]' },
+  electronics: { text: 'text-[var(--purple)]', chipBg: 'bg-[#a855f720]', chipBorder: 'border-[#a855f7]', btnBg: 'bg-[var(--purple)]' },
 };
 
 function formatTime(totalSeconds: number): string {
@@ -40,10 +47,10 @@ export function StudyTimer() {
   const pauseTimer = useStore(s => s.pauseStudyTimer);
   const stopTimer = useStore(s => s.stopStudyTimer);
   const weekStats = useStore(s => s.weekStats);
-  const updateWeekStats = useStore(s => (updates: Partial<typeof weekStats>) => {
+  const updateWeekStats = useCallback((updates: Partial<typeof weekStats>) => {
     const state = useStore.getState();
     useStore.setState({ weekStats: { ...state.weekStats, ...updates } });
-  });
+  }, []);
 
   const [tick, setTick] = useState(0);
   const [pomodoroMode, setPomodoroMode] = useState(false);
@@ -144,19 +151,11 @@ export function StudyTimer() {
         const totalMin = subjectProgress[subj].totalMinutes;
 
         return (
-          <div key={subj} className={`flex items-center gap-[6px] p-[4px_10px] rounded-[14px] cursor-pointer select-none transition-[all_0.15s] hover:-translate-y-[1px] hover:shadow-[var(--shadow-card)]${isActive && !isPaused ? ' animate-[pulseGlow_2.5s_ease-in-out_infinite]' : ''}`}
-            style={{
-              background: isActive ? `${meta.color}20` : 'var(--bg-card)',
-              border: isActive ? `1px solid ${meta.color}` : '1px solid var(--border)',
-            }}>
+          <div key={subj} className={`flex items-center gap-[6px] p-[4px_10px] rounded-[14px] cursor-pointer select-none transition-[all_0.15s] hover:-translate-y-[1px] hover:shadow-[var(--shadow-card)] border${isActive && !isPaused ? ' animate-[pulseGlow_2.5s_ease-in-out_infinite]' : ''} ${isActive ? `${subjectCls[subj].chipBg} ${subjectCls[subj].chipBorder}` : 'bg-[var(--bg-card)] border-[var(--border)]'}`}>
             {isActive ? (
               <div className="flex items-center gap-[4px]">
-                <span className="w-[6px] h-[6px] rounded-[50%]"
-                  style={{
-                    background: isPaused ? 'var(--text-muted)' : '#22c55e',
-                    animation: isPaused ? 'none' : 'pulse 1.5s infinite',
-                  }} />
-                <span className="text-[13px] font-semibold tabular-nums" style={{ color: meta.color }}>
+                <span className={`w-[6px] h-[6px] rounded-full ${isPaused ? 'bg-[var(--text-muted)]' : 'bg-[#22c55e] animate-[pulse_1.5s_infinite]'}`} />
+                <span className={`text-[13px] font-semibold tabular-nums ${subjectCls[subj].text}`}>
                   {liveDisplay}
                 </span>
                 {pomodoroMode && isActive && (
@@ -177,8 +176,7 @@ export function StudyTimer() {
 
             <div className="flex gap-[2px]">
               {!isActive && (
-                <button onClick={(e) => { e.stopPropagation(); startTimer(subj); setShowQuickStart(false); }} className="text-[11px] p-[2px_8px] rounded-[10px] border-none text-[#fff] cursor-pointer"
-                  style={{ background: meta.color }}>开始</button>
+                <button onClick={(e) => { e.stopPropagation(); startTimer(subj); setShowQuickStart(false); }} className={`text-[11px] p-[2px_8px] rounded-[10px] border-none text-[#fff] cursor-pointer ${subjectCls[subj].btnBg}`}>开始</button>
               )}
               {isActive && !isPaused && (
                 <>
@@ -198,12 +196,7 @@ export function StudyTimer() {
       })}
 
       {/* 番茄钟切换 */}
-      <button onClick={() => { setPomodoroMode(!pomodoroMode); setPomodoroPhase('work'); }} className="text-[11px] p-[3px_10px] rounded-[10px] whitespace-nowrap cursor-pointer"
-        style={{
-          background: pomodoroMode ? 'rgba(78,204,163,0.15)' : 'transparent',
-          border: pomodoroMode ? '1px solid #4ecca3' : '1px solid var(--border)',
-          color: pomodoroMode ? '#4ecca3' : 'var(--text-muted)',
-        }}>
+      <button onClick={() => { setPomodoroMode(!pomodoroMode); setPomodoroPhase('work'); }} className={`text-[11px] p-[3px_10px] rounded-[10px] whitespace-nowrap cursor-pointer border ${pomodoroMode ? 'bg-[rgba(78,204,163,0.15)] border-[#4ecca3] text-[#4ecca3]' : 'bg-transparent border-[var(--border)] text-[var(--text-muted)]'}`}>
         🍅 {pomodoroMode ? `${pomodoroCompleted}个` : '番茄'}
       </button>
 

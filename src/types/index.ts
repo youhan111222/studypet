@@ -1,11 +1,11 @@
 export type Period = 'morning' | 'afternoon' | 'evening';
-export type CoachMode = 'auto' | 'preview' | 'suggest';
 export type TaskSource = 'manual' | 'wechat' | 'schedule' | 'ocr' | 'coach';
 
 export interface Task {
   id: string; title: string; period: Period; time: string; duration: number;
   tags: string[]; completed: boolean; source: TaskSource; deadline?: string; pomodoroCount: number;
   date?: string; // YYYY-MM-DD，支持多日规划
+  rewarded?: boolean; // 首次完成已发放奖励（取消勾选不回滚，避免重复奖励）
 }
 export interface Pet {
   name: string; level: number; exp: number; expToNext: number; hearts: number;
@@ -124,5 +124,3 @@ export interface ReviewCard {
   reps: number; lapses: number; state: 'New' | 'Learning' | 'Review' | 'Relearning';
   lastReview: string | null; due: string; subject: SubjectKey; chapter: string;
 }
-
-export type AppView = 'dashboard' | 'tasks' | 'quiz' | 'review' | 'stats' | 'schedule' | 'tracking' | 'analytics' | 'coach';

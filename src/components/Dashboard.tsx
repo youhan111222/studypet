@@ -1,8 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useQuizStore, syncSubjectProgress } from '../store/quizStore';
 import { useNavigate } from 'react-router-dom';
 import type { SubjectKey } from '../types';
+import {
+  fetchReviewDue, checkReview, getDiary, saveDiary,
+  subjectName, daysSinceDate, reviewOrdinal, reviewOverdueDays,
+  type ReviewDueItem,
+} from '../lib/secondbrain';
 
 const SUBJECTS: { key: SubjectKey; name: string; color: string; icon: string }[] = [
   { key: 'electronics', name: '电子技术', color: '#e74c3c', icon: '⚡' },
@@ -10,6 +15,16 @@ const SUBJECTS: { key: SubjectKey; name: string; color: string; icon: string }[]
   { key: 'english', name: '英语', color: '#2ecc71', icon: '🌍' },
   { key: 'politics', name: '政治', color: '#f39c12', icon: '📖' },
 ];
+
+const colorClass: Record<string, string> = {
+  '#ff8c00': 'text-[var(--orange)]',
+  '#4ecca3': 'text-[var(--accent)]',
+  '#0a84ff': 'text-[var(--blue)]',
+  '#e74c3c': 'text-[#e74c3c]',
+  '#3498db': 'text-[#3498db]',
+  '#2ecc71': 'text-[#2ecc71]',
+  '#f39c12': 'text-[#f39c12]',
+};
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -19,6 +34,47 @@ export function Dashboard() {
   const { dueCount, refreshDueCount } = useQuizStore();
 
   useEffect(() => { refreshDueCount(); }, []);
+
+  // SecondBrain 今日待复习
+  const [reviewDue, setReviewDue] = useState<ReviewDueItem[]>([]);
+  useEffect(() => {
+    fetchReviewDue().then(items => setReviewDue(items));
+  }, []);
+
+  // 勾选完成一次复习 → 成功后本地移除
+  const handleReviewCheck = async (item: ReviewDueItem) => {
+    const ok = await checkReview(item.id, item.subject, item.point);
+    if (ok) setReviewDue(prev => prev.filter(it => it.id !== item.id));
+  };
+
+  // 收工日记：统计 + 待复习摘要 → SecondBrain 日记
+  const handleDiary = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const studyMin = activityLogs
+      .filter(l => l.date === today && l.category === 'study')
+      .reduce((s, l) => s + l.duration, 0);
+    const items = reviewDue.length > 0 ? reviewDue : await fetchReviewDue();
+    const dueSummary = items.length > 0
+      ? `${items.length} 项（${items.slice(0, 3).map(i => `${subjectName(i.subject)}·${i.point}`).join('、')}${items.length > 3 ? ' 等' : ''}）`
+      : '无';
+    const content = [
+      `# ${today} 学习日记`,
+      '',
+      '## 今日统计',
+      `- 学习时长：${Math.floor(studyMin / 60)}h${studyMin % 60}m`,
+      `- 完成事项：${weekStats.tasksCompleted} 项`,
+      `- SecondBrain 待复习：${dueSummary}`,
+      '',
+      '## 军立状',
+      '- 今日完成：',
+      '- 卡点：',
+      '- 明日第一步：',
+    ].join('\n');
+    const existing = await getDiary(today);
+    if (existing?.exists && !window.confirm('今日日记已存在，覆盖？')) return;
+    const ok = await saveDiary(today, content);
+    alert(ok ? '📝 日记已保存到 SecondBrain' : '保存失败（SecondBrain 服务不可用）');
+  };
 
   // 每次打开 Dashboard 同步各科进度
   useEffect(() => {
@@ -36,6 +92,16 @@ export function Dashboard() {
 
   return (
     <div className="flex-1 overflow-auto p-6">
+      {/* 顶部：收工日记入口 */}
+      <div className="flex justify-end mb-4 animate-[fadeUp_0.4s_ease-out_both]">
+        <button
+          onClick={handleDiary}
+          className="rounded-xl px-4 py-2 text-sm font-bold transition-all hover:scale-105 cursor-pointer bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)] text-[var(--text-secondary)]"
+        >
+          📝 收工日记
+        </button>
+      </div>
+
       {/* 顶部状态栏 */}
       <div className="grid grid-cols-4 gap-4 mb-6 animate-[fadeUp_0.4s_ease-out_both]" style={{ animationDelay: '100ms' }}>
         {[
@@ -47,10 +113,45 @@ export function Dashboard() {
           <div key={s.label} className="rounded-xl p-4 bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)]">
             <div className="text-2xl mb-1">{s.icon}</div>
             <div className="text-xs text-[var(--text-muted)]">{s.label}</div>
-            <div className="text-2xl font-bold tabular-nums" style={{ color: s.color }}>{s.value}</div>
+            <div className={`text-2xl font-bold tabular-nums ${colorClass[s.color]}`}>{s.value}</div>
           </div>
         ))}
       </div>
+
+      {/* SecondBrain 今日待复习（有数据才显示） */}
+      {reviewDue.length > 0 && (
+        <div className="rounded-xl p-5 mb-6 bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)] animate-[fadeUp_0.4s_ease-out_both]" style={{ animationDelay: '150ms' }}>
+          <h3 className="text-[15px] font-bold mb-3 tracking-[0.02em] text-[var(--text-primary)]">📌 今日待复习</h3>
+          <div className="space-y-2">
+            {reviewDue.map(item => {
+              const days = daysSinceDate(item.lastStudyDate);
+              const label = item.overdue.length > 0
+                ? { text: `超期${reviewOverdueDays(item)}天`, cls: 'bg-[rgba(231,76,60,0.12)] text-[#e74c3c]' }
+                : item.due.some(d => d === days)
+                  ? { text: '今天到期', cls: 'bg-[rgba(245,158,11,0.12)] text-[#f59e0b]' }
+                  : { text: `第${reviewOrdinal(item)}次复习`, cls: 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]' };
+              return (
+                <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)]">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                      {subjectName(item.subject)} · {item.point}
+                    </div>
+                    <div className="text-xs text-[var(--text-muted)] mt-0.5">学习于 {item.lastStudyDate}</div>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full shrink-0 ${label.cls}`}>{label.text}</span>
+                  <button
+                    onClick={() => handleReviewCheck(item)}
+                    title="完成本次复习"
+                    className="w-7 h-7 rounded-full shrink-0 text-sm border border-[var(--border)] bg-[var(--bg-tertiary)] text-[var(--text-muted)] cursor-pointer transition-all hover:bg-[rgba(78,204,163,0.15)] hover:text-[#4ecca3] hover:border-[rgba(78,204,163,0.4)]"
+                  >
+                    ✓
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 快速入口 */}
       <div className="grid grid-cols-4 gap-4 mb-6 animate-[fadeUp_0.4s_ease-out_both]" style={{ animationDelay: '200ms' }}>
@@ -61,7 +162,7 @@ export function Dashboard() {
             className="rounded-xl p-5 text-left transition-all hover:scale-105 cursor-pointer bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)]"
           >
             <div className="text-3xl mb-2">{s.icon}</div>
-            <div className="text-sm font-bold" style={{ color: s.color }}>{s.name}</div>
+            <div className={`text-sm font-bold ${colorClass[s.color]}`}>{s.name}</div>
             <div className="text-xs mt-1 text-[var(--text-muted)]">开始刷题 →</div>
           </button>
         ))}

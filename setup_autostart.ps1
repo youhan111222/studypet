@@ -18,8 +18,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "✅ StudyPet 全部服务已配置开机自启！" -ForegroundColor Green
     Write-Host ""
     Write-Host "   每次开机自动启动（无 UAC 弹窗）："
-    Write-Host "   - api_server.py      (19998)"
-    Write-Host "   - deepseek_service   (19999)"
+    Write-Host "   - api_server.py      (19998, 含AI教练)"
     Write-Host "   - tracker.py         (后台)"
     Write-Host "   - Vite 前端           (5173)"
     Write-Host ""

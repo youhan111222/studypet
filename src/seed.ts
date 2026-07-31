@@ -73,7 +73,7 @@ const seedQuestions: Question[] = [
     difficulty: 'easy', tags: ['BJT', '共集电路'], source: 'manual', createdAt: '2026-07-31' },
   { id: 'elec-6', subject: 'electronics', chapter: '双极结型三极管(BJT)及其放大电路', type: 'single',
     stem: '分压偏置式共射放大电路稳定静态工作点主要依靠？', options: ['增大电源电压', '减小基极电阻Rb', '提高环境温度', 'Re的直流负反馈'],
-    answer: 'C', analysis: '发射极电阻Re引入直流负反馈：温度升高→Ic增大→Ie增大→Ue升高→UBE减小→IB减小→Ic回落，从而稳定工作点。',
+    answer: 'D', analysis: '发射极电阻Re引入直流负反馈：温度升高→Ic增大→Ie增大→Ue升高→UBE减小→IB减小→Ic回落，从而稳定工作点。',
     difficulty: 'medium', tags: ['BJT', '静态工作点'], source: 'manual', createdAt: '2026-07-31' },
   { id: 'elec-7', subject: 'electronics', chapter: '反馈放大电路', type: 'single',
     stem: '电压串联负反馈对放大电路的影响是？', options: ['稳定输出电流、减小输入电阻', '稳定输出电压、减小输入电阻', '稳定输出电流、增大输入电阻', '稳定输出电压、增大输入电阻'],
@@ -125,7 +125,7 @@ const seedQuestions: Question[] = [
     stem: '隐函数 x²+y²=25 在点 (3,4) 处的切线斜率为？', options: ['3/4', '-4/3', '4/3', '-3/4'],
     answer: 'D', analysis: '两边对x求导：2x+2y·y\'=0 → y\'=-x/y。代入(3,4)得 y\'=-3/4。',
     difficulty: 'medium', tags: ['隐函数求导'], source: 'manual', createdAt: '2026-07-31' },
-  { id: 'math-7', subject: 'math', chapter: '不定积分', type: 'single',
+  { id: 'math-7', subject: 'math', chapter: '定积分及其应用', type: 'single',
     stem: '定积分 ∫₀¹ x² dx = ?', options: ['1/2', '1/3', '1', '2/3'],
     answer: 'B', analysis: '∫x²dx = x³/3，代入上下限：1/3 - 0 = 1/3。',
     difficulty: 'easy', tags: ['定积分'], source: 'manual', createdAt: '2026-07-31' },
@@ -289,7 +289,7 @@ const seedQuestions: Question[] = [
     difficulty: 'medium', tags: ['555定时器'], source: 'manual', createdAt: '2026-07-31' },
   { id: 'elec-40', subject: 'electronics', chapter: '直流稳压电源', type: 'single',
     stem: '桥式整流加电容滤波后，空载输出电压约为副边电压有效值的？', options: ['0.45U2', '0.9U2', '1.2U2', '1.41U2'],
-    answer: 'C', analysis: '电容滤波空载时 Uo≈√2U2=1.41U2，带负载后约 1.2U2；纯桥式整流 0.9U2，半波 0.45U2。',
+    answer: 'D', analysis: '电容滤波空载时 Uo≈√2U2=1.41U2，带负载后约 1.2U2；纯桥式整流 0.9U2，半波 0.45U2。',
     difficulty: 'medium', tags: ['整流滤波'], source: 'manual', createdAt: '2026-07-31' },
 
   // ===== 高数扩充二（math-13..30，共 18 题）=====
@@ -408,7 +408,7 @@ const seedQuestions: Question[] = [
     answer: 'B', analysis: 'acquire = obtain（获得、习得）。acquire knowledge 获取知识。',
     difficulty: 'medium', tags: ['词汇', '近义词'], source: 'manual', createdAt: '2026-07-31' },
   { id: 'english-19', subject: 'english', chapter: '词汇3000词', type: 'single',
-    stem: '单词 "efficient" 的意思是？', options: ['高效的', '充足的', '有效的（正确但不贴切）', '昂贵的'],
+    stem: '单词 "efficient" 的意思是？', options: ['高效的', '充足的', '有效的', '昂贵的'],
     answer: 'A', analysis: 'efficient 高效的（以最少浪费达到目的）；effective 有效的（达到预期效果），两词常混考。',
     difficulty: 'medium', tags: ['词汇'], source: 'manual', createdAt: '2026-07-31' },
   { id: 'english-20', subject: 'english', chapter: '词汇3000词', type: 'single',
@@ -563,17 +563,26 @@ const seedQuestions: Question[] = [
     difficulty: 'easy', tags: ['辩证法'], source: 'manual', createdAt: '2026-07-31' },
 ];
 
+const SEED_COMPARE_KEYS = ['subject', 'chapter', 'type', 'stem', 'answer', 'analysis',
+  'options', 'difficulty', 'tags', 'source'] as const;
+
 async function seed() {
-  let added = 0;
+  let added = 0, updated = 0;
   for (const q of seedQuestions) {
     const existing = await db.questions.get(q.id);
     if (existing) {
+      const changed = SEED_COMPARE_KEYS.some(k => JSON.stringify(existing[k]) !== JSON.stringify(q[k]));
+      if (changed) {
+        await db.questions.put(q);
+        updated += 1;
+      }
       continue;
     }
     await db.questions.put(q);
     added += 1;
   }
-  console.log(added ? `已补充 ${added} 道种子题目` : '题库已是最新，无新增');
+  console.log(added || updated ? `已补充 ${added} 道、修正 ${updated} 道种子题目` : '题库已是最新，无改动');
 }
 
-seed();
+// IndexedDB 不可用时静默降级，不影响应用启动（题目列表为空可接受）
+seed().catch((e) => console.warn('种子题目初始化失败（IndexedDB 不可用?）:', e));
