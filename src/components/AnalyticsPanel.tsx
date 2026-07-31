@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import type { SubjectKey } from '../types';
-
-const API = '';  // 走 Vite 代理 → /activity → 19998
+import type { ActivityLog, MasteryLevel, SubjectKey } from '../types';
+import { hexToRgb } from '../utils';
+import { API } from '../config';
 
 interface RawHistoryItem {
   window_title: string;
@@ -60,16 +60,39 @@ export function AnalyticsPanel() {
   const activityLogs = useStore(s => s.activityLogs);
   const tasks = useStore(s => s.tasks);
   const schedule = useStore(s => s.schedule);
-  const [view, setView] = useState<'overview' | 'subject' | 'time' | 'compare'>('overview');
+  const [view, setView] = useState<'overview' | 'subject' | 'time' | 'compare' | 'knowledge'>('overview');
   const [subjectStats, setSubjectStats] = useState<SubjectStats[]>([]);
   const [timeStats, setTimeStats] = useState<TimeSlotStats[]>([]);
   const [lowEfficiencyHours, setLowEfficiencyHours] = useState<number[]>([]);
   const [peerComparison, setPeerComparison] = useState<{ label: string; you: number; avg: number }[]>([]);
   const [useRealData, setUseRealData] = useState(false);
 
-  // 从 API 拉取真实历史数据
+  // 从 Patina API（首选）或 tracker.py（回退）拉取历史数据
   useEffect(() => {
     const fetchHistory = async () => {
+      // 优先用 Patina 数据
+      try {
+        const pres = await fetch(`${API}/patina/history?days=14`);
+        if (pres.ok) {
+          const raw: RawHistoryItem[] = await pres.json();
+          if (raw.length > 0) {
+            setUseRealData(true);
+            const logs = raw.map((r, i) => ({
+              id: `patina-${i}`,
+              appName: r.process_name,
+              windowTitle: r.window_title,
+              category: r.category as ActivityLog['category'],
+              startTime: r.start_time?.slice(11, 16) || '',
+              duration: Math.round(r.duration_seconds / 60),
+              date: r.date,
+            }));
+            processLogs(logs, raw);
+            return;
+          }
+        }
+      } catch {}
+
+      // 回退：tracker.py 数据
       try {
         const res = await fetch(`${API}/activity/history?days=14`);
         const raw: RawHistoryItem[] = await res.json();
@@ -78,19 +101,18 @@ export function AnalyticsPanel() {
           const logs = raw.map((r, i) => ({
             id: `hist-${i}`,
             appName: r.process_name,
-            windowTitle: r.window_title,  // 保留窗口标题用于科目推断
-            category: r.category as any,
+            windowTitle: r.window_title,
+            category: r.category as ActivityLog['category'],
             startTime: r.start_time?.slice(11, 16) || '',
             duration: Math.round(r.duration_seconds / 60),
             date: r.date,
           }));
-          // 附带原始数据用于 session 分析
-          (logs as any)._rawData = raw;
-          processLogs(logs);
+          processLogs(logs, raw);
           return;
         }
       } catch {}
-      // 回退到 store 数据
+
+      // 最后回退到 store 数据
       const today = new Date().toISOString().slice(0, 10);
       const recentLogs = activityLogs.filter(l => l.date !== today).slice(-14);
       if (recentLogs.length > 0) processLogs(recentLogs.map(l => ({ ...l, windowTitle: l.appName })));
@@ -98,7 +120,7 @@ export function AnalyticsPanel() {
     fetchHistory();
   }, [activityLogs]);
 
-  const processLogs = (logs: { appName: string; windowTitle: string; category: string; duration: number; date: string; startTime: string }[]) => {
+  const processLogs = (logs: { appName: string; windowTitle: string; category: string; duration: number; date: string; startTime: string }[], raw?: RawHistoryItem[]) => {
     const todayStr = new Date().toISOString().slice(0, 10);
     const recentLogs = logs.filter(l => l.date !== todayStr).slice(-14);
 
@@ -139,7 +161,7 @@ export function AnalyticsPanel() {
     // rawData 来自外部闭包（fetchHistory 中的 raw）
     const rawStudySessions: Record<string, number[]> = {};
     allKeys.forEach(k => { rawStudySessions[k] = []; });
-    (logs as any)._rawData?.forEach((r: RawHistoryItem) => {
+    raw?.forEach((r: RawHistoryItem) => {
       if (r.category !== 'study') return;
       const subject = inferSubject(r.window_title);
       if (subject && r.duration_seconds > 0) {
@@ -286,14 +308,14 @@ export function AnalyticsPanel() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['overview', 'subject', 'time', 'compare'] as const).map(v => (
+          {(['overview', 'subject', 'time', 'compare', 'knowledge'] as const).map(v => (
             <button key={v} onClick={() => setView(v)} style={{
               padding: '6px 14px', borderRadius: 6,
               background: view === v ? 'var(--accent)' : 'var(--bg-tertiary)',
               color: view === v ? '#000' : 'var(--text-secondary)',
               fontSize: 12, border: '1px solid var(--border)',
             }}>
-              {v === 'overview' ? '概览' : v === 'subject' ? '科目' : v === 'time' ? '时段' : '对比'}
+              {v === 'overview' ? '概览' : v === 'subject' ? '科目' : v === 'time' ? '时段' : v === 'compare' ? '对比' : '知识'}
             </button>
           ))}
         </div>
@@ -416,7 +438,7 @@ export function AnalyticsPanel() {
                 </div>
                 <div style={{
                   padding: '4px 12px', borderRadius: 20,
-                  background: `rgba(${getEfficiencyColor(s.focusScore).slice(1)},0.1)`,
+                  background: `rgba(${hexToRgb(getEfficiencyColor(s.focusScore))},0.1)`,
                   color: getEfficiencyColor(s.focusScore),
                   fontSize: 12, fontWeight: 600,
                 }}>
@@ -450,7 +472,7 @@ export function AnalyticsPanel() {
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{ts.hour}:00-{ts.hour + 1}:00</div>
                 <div style={{
                   fontSize: 11, padding: '2px 8px', borderRadius: 4,
-                  background: `rgba(${getEfficiencyColor(ts.efficiency).slice(1)},0.1)`,
+                  background: `rgba(${hexToRgb(getEfficiencyColor(ts.efficiency))},0.1)`,
                   color: getEfficiencyColor(ts.efficiency),
                 }}>
                   {ts.efficiency}% 效率
@@ -524,12 +546,152 @@ export function AnalyticsPanel() {
               {subjectStats.find(s => s.focusScore < 30) && (
                 <li>对 {subjectStats.filter(s => s.focusScore < 30).map(s => s.name).join('、')} 科目增加每日固定投入时间</li>
               )}
-              {peerComparison.find(p => p.label === '娱乐占比' && p.you > 50) && (
-                <li>娱乐占比偏高，建议将部分娱乐时间转为番茄钟休息</li>
-              )}
               <li>根据课表，在空档期（如上午10-11点）安排需要深度专注的任务</li>
             </ul>
           </div>
+        </div>
+      )}
+
+      {/* ====== 知识体系视图 ====== */}
+      {view === 'knowledge' && <KnowledgeView />}
+    </div>
+  );
+}
+
+// ====== 知识体系子组件 ======
+function KnowledgeView() {
+  const subjectProgress = useStore(s => s.subjectProgress);
+  const studyChecklists = useStore(s => s.studyChecklists);
+  const practiceLogs = useStore(s => s.practiceLogs);
+  const updateChapterMastery = useStore(s => s.updateChapterMastery);
+
+  const subjectNames: Record<SubjectKey, string> = { electronics: '电子技术', english: '英语', math: '高数', politics: '政治' };
+  const subjectColors: Record<SubjectKey, string> = { electronics: '#a855f7', english: '#0a84ff', math: '#ff6b6b', politics: '#ffa726' };
+  const masteryColors: Record<string, string> = { not_started: '#666', learning: '#0a84ff', review_needed: '#f59e0b', mastered: '#4ecca3' };
+  const masteryLabels: Record<string, string> = { not_started: '未开始', learning: '学习中', review_needed: '需复习', mastered: '已掌握' };
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* 章节掌握状态 */}
+      {(Object.keys(subjectProgress) as SubjectKey[]).map(subject => {
+        const sp = subjectProgress[subject];
+        const chapters = sp.chapterDetails || [];
+        if (chapters.length === 0) return null;
+        const mastered = chapters.filter(c => c.mastery === 'mastered').length;
+        const pct = chapters.length > 0 ? Math.round((mastered / chapters.length) * 100) : 0;
+
+        return (
+          <div key={subject} style={{
+            padding: 14, borderRadius: 12, background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: subjectColors[subject],
+                }} />
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{subjectNames[subject]}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {mastered}/{chapters.length} 章 · {pct}%
+                </span>
+              </div>
+            </div>
+            {/* 进度条 */}
+            <div style={{ height: 6, background: 'var(--bg-tertiary)', borderRadius: 3, marginBottom: 8 }}>
+              <div style={{
+                width: `${pct}%`, height: '100%', borderRadius: 3,
+                background: `linear-gradient(90deg, ${subjectColors[subject]}, #4ecca3)`,
+                transition: 'width 0.3s',
+              }} />
+            </div>
+            {/* 章节标签 */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {chapters.slice(0, 12).map(c => (
+                <button
+                  key={c.name}
+                  onClick={() => {
+                    const next: Record<string, string> = { not_started: 'learning', learning: 'review_needed', review_needed: 'mastered', mastered: 'review_needed' };
+                    updateChapterMastery(subject, c.name, next[c.mastery] as MasteryLevel);
+                  }}
+                  title={`${c.name}: ${masteryLabels[c.mastery]} | 复习${c.reviewCount}次${c.nextReviewDate ? ' | 下次:' + c.nextReviewDate : ''}`}
+                  style={{
+                    padding: '3px 8px', borderRadius: 12, fontSize: 10,
+                    background: masteryColors[c.mastery] + '22',
+                    border: `1px solid ${masteryColors[c.mastery]}44`,
+                    color: masteryColors[c.mastery],
+                    cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {c.name}
+                </button>
+              ))}
+              {chapters.length === 0 && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>暂无章节数据 · AI教练可标记章节掌握状态</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* 学习清单 */}
+      {studyChecklists.length > 0 && (
+        <div style={{
+          padding: 14, borderRadius: 12, background: 'var(--bg-secondary)',
+          border: '1px solid var(--border)',
+        }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>📝 学习清单</h4>
+          {studyChecklists.slice(0, 5).map(cl => (
+            <div key={cl.id} style={{
+              padding: '8px 10px', borderRadius: 8, marginBottom: 6,
+              background: 'var(--bg-tertiary)', fontSize: 11,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontWeight: 500 }}>{cl.title}</span>
+                <span style={{
+                  padding: '1px 6px', borderRadius: 6, fontSize: 9,
+                  background: cl.type === 'execute' ? 'rgba(10,132,255,0.15)' : 'rgba(78,204,163,0.15)',
+                  color: cl.type === 'execute' ? '#0a84ff' : '#4ecca3',
+                }}>
+                  {cl.type === 'execute' ? '执行' : '核查'}
+                </span>
+              </div>
+              {cl.items.slice(0, 5).map((item, i) => (
+                <div key={i} style={{ color: 'var(--text-secondary)', paddingLeft: 8 }}>
+                  {i + 1}. {item}
+                </div>
+              ))}
+              {cl.items.length > 5 && (
+                <div style={{ color: 'var(--text-muted)', paddingLeft: 8 }}>...共{cl.items.length}项</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 刻意练习记录 */}
+      {practiceLogs.length > 0 && (
+        <div style={{
+          padding: 14, borderRadius: 12, background: 'var(--bg-secondary)',
+          border: '1px solid var(--border)',
+        }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>🎯 刻意练习记录</h4>
+          {practiceLogs.slice(-5).reverse().map(pl => (
+            <div key={pl.id} style={{
+              padding: '6px 10px', borderRadius: 6, marginBottom: 4,
+              background: 'var(--bg-tertiary)', fontSize: 11,
+              borderLeft: `3px solid ${subjectColors[pl.subject] || '#666'}`,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>{pl.date} · {subjectNames[pl.subject]} · {pl.chapter}</span>
+              </div>
+              <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>
+                结果: {pl.result} | 下一步: {pl.nextAction}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

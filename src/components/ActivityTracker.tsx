@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
-
-const API = '';  // 走 Vite 代理 → /activity → 19998
+import { API } from '../config';
+import type { ActivityLog } from '../types';
 
 const catColors: Record<string, string> = {
   study: 'var(--accent)',
@@ -62,7 +62,7 @@ export function ActivityTracker() {
     ? stats.apps.map((r, i) => ({
         id: `r-${i}`,
         appName: r.appName,
-        category: r.category as any,
+        category: r.category as ActivityLog['category'],
         startTime: '',
         duration: r.duration,
         date: stats.date,

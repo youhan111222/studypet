@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "command": "cd /d/StudyPet && ruff check . --fix 2>&1 && echo 'ruff: clean'"
+      }
+    ]
+  }
+}

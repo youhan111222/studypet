@@ -1,19 +1,9 @@
 import { useState, useRef, useMemo } from 'react';
 import { useStore } from '../store/useStore';
+import { SEMESTER_START, getCurrentWeek } from '../config';
 import type { ScheduleItem } from '../types';
 
 const dayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-
-// 计算当前是第几周（从学期开始日期算起，均使用本地时间）
-function getCurrentWeek(semesterStart: string): number {
-  const [y, m, d] = semesterStart.split('-').map(Number);
-  const start = new Date(y, m - 1, d); // 本地时间 00:00
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // 本地时间 00:00
-  const diffMs = today.getTime() - start.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  return Math.max(1, Math.floor(diffDays / 7) + 1);
-}
 
 // 获取本周一的日期
 function getMondayOfWeek(date: Date): Date {
@@ -62,11 +52,10 @@ export function SchedulePanel() {
       const day = parseInt(cols[dayIdx]) || 0;
       if (!name || day < 1 || day > 7) continue;
 
-      const dayMap: Record<number, number> = { 7: 7 };
       items.push({
         id: `csv-${Date.now()}-${i}`,
         name,
-        day: day > 5 ? day : day,
+        day,
         timeStart: cols[startIdx] || '08:00',
         timeEnd: cols[endIdx] || '09:40',
         location: locIdx >= 0 ? cols[locIdx] || '' : '',
@@ -188,8 +177,8 @@ export function SchedulePanel() {
   const displayDay = todayDay === 0 ? 7 : todayDay;
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
-  // 学期开始日期（可配置，默认 2026 年春季学期）
-  const [semesterStart, setSemesterStart] = useState('2026-03-02');
+  // 学期开始日期（统一在 src/config.ts 配置）
+  const [semesterStart, setSemesterStart] = useState(SEMESTER_START);
   const currentWeek = getCurrentWeek(semesterStart);
 
   // 判断给定周次字符串是否包含当前周（支持 "13" / "1-17" / "1,3,5" / "1-8,10,12-14"）

@@ -6,6 +6,34 @@ React + TypeScript + Zustand 前端项目，宠兽养成×学习管理。本地�
 ## 用户身份
 专升本考生，备考科目：英语、高数、政治、电子技术。
 
+---
+
+## 核心技术规约（死律，每次修改必须遵守）
+
+### 后端规范
+- 所有 API 必须经过 `api_server.py` 的统一路由，禁止在 `deepseek_service.py` 中暴露新端口给前端直调
+- 所有数据库操作必须捕获 SQLite 异常（`sqlite3.Error`），禁止直接抛出裸异常
+- 异常信息写入 `api_error.log`，前端只返回 `{"error": "服务器内部错误"}` 不泄露堆栈
+- 端口分配：19998（API）、19999（AI Coach），禁止随意新增端口
+
+### 前端规范
+- 宽度调整组件严格限制在 380px-700px 之间
+- 禁止使用硬编码的 `style={{}}`，必须用 Tailwind CSS class
+- 所有 API 调用走 Vite 代理，禁止直接写 `http://127.0.0.1:19998` 在前端代码里
+- Zustand store 的 persist 只保留最近 30 天数据
+
+### 质量门禁
+- 测试：`pytest`（全部通过才算合格）
+- 格式化：`ruff check . --fix`（零 warning 才算干净）
+- 类型检查：`npx tsc --noEmit`（TypeScript 零错误）
+
+### 禁止事项
+- 禁止删除或重构 `tracker.py` 中的 Windows API 轮询核心逻辑（用户确认保留）
+- 禁止修改 `exam_syllabus.json` 中的考试科目配置（写死的，不变的）
+- 禁止在未与用户确认前修改端口号或服务架构
+
+---
+
 ## AI 教练协议（核心规则）
 
 ### 1. 教练身份

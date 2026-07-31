@@ -1,14 +1,29 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { useMemoryStore } from '../store/memory';
+import { analyzeState } from '../store/stateAnalyzer';
+import { isWeekInRange, parseDate } from '../utils';
 import type { ChatMessage, SubjectKey, SubjectProgress } from '../types';
+import { API, SEMESTER_START, getCurrentWeek } from '../config';
 
-const API = '';  // 走 Vite 代理 → /coach → 19999
-const TOTAL_WEEKS = 17; // 学期总周数
+const TOTAL_WEEKS = 17;
+const MIN_WIDTH = 380;
+const MAX_WIDTH = 700;
+
+function getTodayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatTabLabel(dateStr: string, isToday: boolean): string {
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}/${d.getDate()}${isToday ? ' 今天' : ''}`;
+}
 
 export function CoachPanel() {
-  const messages = useStore(s => s.messages);
+  const sessions = useStore(s => s.sessions);
+  const activeSessionDate = useStore(s => s.activeSessionDate);
   const addMessage = useStore(s => s.addMessage);
+  const updateSessionSummary = useStore(s => s.updateSessionSummary);
   const toggleCoach = useStore(s => s.toggleCoach);
   const applyPlan = useStore(s => s.applyPlan);
   const tasks = useStore(s => s.tasks);
@@ -24,116 +39,219 @@ export function CoachPanel() {
   const toggleImportant = useStore(s => s.toggleImportant);
   const deleteImportant = useStore(s => s.deleteImportant);
   const updateSubjectProgress = useStore(s => s.updateSubjectProgress);
+  const updateChapterMastery = useStore(s => s.updateChapterMastery);
+  const addStudyChecklist = useStore(s => s.addStudyChecklist);
+  const addPracticeLog = useStore(s => s.addPracticeLog);
   const addExamRecord = useStore(s => s.addExamRecord);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchEnabled, setSearchEnabled] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(460);
+  const [isFullWidth, setIsFullWidth] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+  const todayStr = getTodayStr();
+  const currentSession = sessions.find(s => s.date === activeSessionDate);
+  const currentMessages = currentSession?.messages || [];
+  const isToday = activeSessionDate === todayStr;
+  const isEmpty = currentMessages.length === 0;
 
-  // 主动问候：打开教练时若距离上次对话超过5分钟，自动分析当前状态
-  const hasGreeted = useRef(false);
+  // Yesterday summary for cross-day context
+  const yesterdayStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const yesterdaySession = sessions.find(s => s.date === yesterdayStr);
+  const yesterdaySummary = yesterdaySession?.summary;
+
+  // 跨日摘要自动生成：今天首次打开空会话时，给昨天对话生成一句话摘要
   useEffect(() => {
-    if (hasGreeted.current) return;
-    const lastMsg = messages[messages.length - 1];
-    const staleMs = 5 * 60 * 1000;
-    if (!lastMsg || Date.now() - parseInt(lastMsg.id.split('-')[1] || '0') > staleMs) {
-      hasGreeted.current = true;
-      const doGreet = async () => {
-        setLoading(true);
-        try {
-          const result = await callDeepSeekRef.current('【系统自动触发 - 用户刚打开AI助手，请主动分析当前状态并给出问候和建议。直接开口，不要问"有什么事"】');
-          if (result.error) { setLoading(false); return; }
-          let content = result.content || '';
-          content = extractMemories(content);
-          const { cleanContent: afterActions, summary: actionSummary } = executeActions(content);
-          const { cleanContent } = extractPlan(afterActions);
-          addMessage({ id: `c-${Date.now()}`, role: 'coach', content: cleanContent });
-          if (actionSummary) {
-            addMessage({ id: `sys-${Date.now()}`, role: 'coach', content: actionSummary });
-          }
-        } catch { /* silent */ }
-        setLoading(false);
-      };
-      doGreet();
-    } else {
-      hasGreeted.current = true;
+    if (!isToday || !isEmpty) return;
+    if (!yesterdaySession) return;
+    if (yesterdaySession.summary) return;
+    const msgs = yesterdaySession.messages;
+    if (msgs.length === 0) return;
+
+    const recent = msgs.slice(-6).map(m =>
+      `${m.role === 'user' ? '用户' : '教练'}: ${(m.content || '').slice(0, 80)}`
+    ).join('\n');
+
+    const controller = new AbortController();
+    fetch('/coach/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `请用一句话（不超过30字）总结以下对话的核心话题：\n${recent}`,
+        context: { system_state: '你是摘要机器人，只输出一句话摘要，不要回复其他内容。' }
+      }),
+      signal: controller.signal,
+    }).then(r => r.json()).then(d => {
+      if (d.response) {
+        const s = d.response.replace(/^[：:]/g, '').trim().slice(0, 50);
+        updateSessionSummary(yesterdayStr, s);
+      }
+    }).catch(() => {});
+
+    return () => controller.abort();
+  }, [isToday, isEmpty, yesterdayStr, yesterdaySession?.messages?.length]);
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentMessages, loading]);
+
+  // ====== Voice ======
+  const speak = useCallback((text: string) => {
+    if (!voiceOn) return;
+    try {
+      const u = new SpeechSynthesisUtterance(text.replace(/\[MEMORY:[^\]]+\]/gi, '').replace(/\[ACTION:\w+\]\s*\{[\s\S]*?\}/gi, ''));
+      u.lang = 'zh-CN';
+      u.rate = 1.0;
+      u.volume = 0.9;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    } catch { /* 浏览器不支持或静音 */ }
+  }, [voiceOn]);
+
+  // ====== Drag resize ======
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startWidth: panelWidth };
+    const handleMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const dx = dragRef.current.startX - ev.clientX;
+      setPanelWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, dragRef.current.startWidth + dx)));
+    };
+    const handleUp = () => {
+      dragRef.current = null;
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+    };
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+  }, [panelWidth]);
+
+  // ====== Session tabs (last 7 days) ======
+  const tabDates = useMemo(() => {
+    const dates: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      dates.push(d.toISOString().slice(0, 10));
     }
+    return dates;
   }, []);
 
-  // 解析 weeks 字段判断某课程是否在某周生效
-  const isWeekInRange = (weeks: string, w: number): boolean => {
-    if (!weeks) return true;
-    const s = String(weeks);
-    const parts = s.split(',');
-    for (const part of parts) {
-      const trimmed = part.trim();
-      if (trimmed.includes('-')) {
-        const [start, end] = trimmed.split('-').map(Number);
-        if (w >= start && w <= end) return true;
-      } else {
-        if (Number(trimmed) === w) return true;
-      }
-    }
-    return false;
-  };
+  const setActiveSessionDate = useCallback((date: string) => {
+    useStore.setState({ activeSessionDate: date });
+  }, []);
 
-  const buildContext = (todayStr: string, todayFull: string, weekDates: string[]): string => {
+  // ====== Status card data (today + empty session) ======
+  const statusCardData = useMemo(() => {
+    if (!isToday) return null;
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const dayOfWeek = now.getDay();
+
+    const semesterWeek = getCurrentWeek(SEMESTER_START);
+
+    const todayDayOfWeek = dayOfWeek;
+    const todayScheduleDay = todayDayOfWeek === 0 ? 7 : todayDayOfWeek;
+    const todayClasses = schedule.filter(s =>
+      s.day === todayScheduleDay && isWeekInRange(s.weeks, semesterWeek)
+    );
+
+    const pendingTasks = tasks.filter(t => !t.completed);
+    const todayStudyMin = activityLogs
+      .filter(l => l.date === todayStr && l.category === 'study')
+      .reduce((s, l) => s + l.duration, 0);
+
     const state = useStore.getState();
-    const { tasks, schedule, activityLogs, importantItems, pet, achievements, streak, weekStats, autoPlan, subjectProgress, examRecords } = state;
+    const analysis = analyzeState({
+      today: todayStr, hour: h, minute: m, dayOfWeek,
+      activityLogs: state.activityLogs,
+      tasks: state.tasks,
+      subjectProgress: state.subjectProgress,
+      streak: state.streak,
+      achievements: state.achievements,
+      petLevel: state.pet.level,
+      petCoins: state.pet.coins,
+      schedule: state.schedule,
+      semesterWeek,
+    });
 
-    const done = tasks.filter(t => t.completed);
-    const remaining = tasks.filter(t => !t.completed);
+    // 今日到期需复习的章节
+    const reviewDue: { subject: SubjectKey; chapter: string; daysAgo: number }[] = [];
+    const sp = state.subjectProgress;
+    (Object.keys(sp) as SubjectKey[]).forEach(key => {
+      (sp[key].chapterDetails || []).forEach(c => {
+        if (c.nextReviewDate && c.nextReviewDate <= todayStr && c.mastery !== 'mastered') {
+          const lastDate = c.lastReviewDate ? new Date(c.lastReviewDate) : new Date('2026-01-01');
+          reviewDue.push({ subject: key, chapter: c.name, daysAgo: Math.floor((Date.now() - lastDate.getTime()) / 86400000) });
+        }
+      });
+    });
+
+    return { semesterWeek, todayClasses, pendingTasks, todayStudyMin, analysis, reviewDue };
+  }, [isToday, todayStr, schedule, tasks, activityLogs, useStore(s => s.subjectProgress)]);
+
+  // ====== buildContext (unchanged core) ======
+  const buildContext = (todayDateStr: string, todayFull: string, weekDates: string[]): string => {
+    const state = useStore.getState();
+    const { tasks: allTasks, schedule: sch, activityLogs: logs, importantItems: imps, pet, achievements, streak, weekStats, autoPlan, subjectProgress, examRecords } = state;
+
+    const done = allTasks.filter(t => t.completed);
+    const remaining = allTasks.filter(t => !t.completed);
     const dayNamesZH = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
-    // 教学周计算（本地时间）
-    // 开学日期（2026年春季学期），后续可改为用户配置
-    const [sy, sm, sd] = '2026-03-02'.split('-').map(Number);
-    const parseDate = (s: string) => {
-      const [py, pm, pd] = s.split('-').map(Number);
-      return new Date(py, pm - 1, pd);
-    };
-    const semesterStart = new Date(sy, sm - 1, sd);
-    const todayDate = parseDate(todayStr);
-    const semesterWeek = Math.floor((todayDate.getTime() - semesterStart.getTime()) / (7 * 86400000)) + 1;
+    const todayDate = parseDate(todayDateStr);
+    const semesterWeek = getCurrentWeek(SEMESTER_START);
 
-    const todayDayOfWeek = parseDate(todayStr).getDay();
+    const todayDayOfWeek = parseDate(todayDateStr).getDay();
     const todayScheduleDay = todayDayOfWeek === 0 ? 7 : todayDayOfWeek;
 
-    // ===== 1. 今日课表 =====
-    const todayClasses = schedule.filter(s =>
+    const todayClasses = sch.filter(s =>
       s.day === todayScheduleDay && isWeekInRange(s.weeks, semesterWeek)
     );
     const todayClassSummary = todayClasses.length > 0
       ? todayClasses.map(s => `${s.name} ${s.timeStart}-${s.timeEnd}@${s.location}`).join('、')
       : '无课';
 
-    // ===== 2. 本周课表 =====
     const weekLines: string[] = [];
     for (let d = 1; d <= 7; d++) {
-      const items = schedule.filter(s => s.day === d && isWeekInRange(s.weeks, semesterWeek));
+      const items = sch.filter(s => s.day === d && isWeekInRange(s.weeks, semesterWeek));
       weekLines.push(`  ${dayNamesZH[d === 7 ? 0 : d]} ${weekDates[d-1].slice(5)}: ${items.length > 0 ? items.map(s => `${s.name} ${s.timeStart}-${s.timeEnd}`).join(' | ') : '无课'}`);
     }
 
-    // ===== 3. 全学期课表（按周排列，AI 核心数据） =====
-    const fullSemesterLines: string[] = [];
-    for (let w = 1; w <= TOTAL_WEEKS; w++) {
-      const weekCourses: string[] = [];
-      for (let d = 1; d <= 7; d++) {
-        const items = schedule.filter(s => s.day === d && isWeekInRange(s.weeks, w));
-        if (items.length > 0) {
-          weekCourses.push(`${dayNamesZH[d === 7 ? 0 : d]}: ${items.map(s => `${s.name} ${s.timeStart}-${s.timeEnd}`).join(' | ')}`);
-        }
+    // 明天课表
+    const tomorrow = new Date(todayDate);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowDayOfWeek = tomorrow.getDay();
+    const tomorrowScheduleDay = tomorrowDayOfWeek === 0 ? 7 : tomorrowDayOfWeek;
+    const tomorrowClasses = sch.filter(s =>
+      s.day === tomorrowScheduleDay && isWeekInRange(s.weeks, semesterWeek)
+    );
+    const tomorrowClassSummary = tomorrowClasses.length > 0
+      ? tomorrowClasses.map(s => `${s.name} ${s.timeStart}-${s.timeEnd}@${s.location}`).join('、')
+      : '无课';
+
+    // 本周剩余课表（从明天到周日）
+    const restOfWeekLines: string[] = [];
+    for (let d = tomorrowDayOfWeek; d <= 7; d++) {
+      const items = sch.filter(s => s.day === d && isWeekInRange(s.weeks, semesterWeek));
+      if (items.length > 0) {
+        const dateStr = weekDates[d - 1]?.slice(5) || '';
+        restOfWeekLines.push(`  ${dayNamesZH[d === 7 ? 0 : d]} ${dateStr}: ${items.map(s => `${s.name} ${s.timeStart}-${s.timeEnd}`).join(' | ')}`);
       }
-      const tag = w === semesterWeek ? ' ← 当前周' : '';
-      fullSemesterLines.push(`  第${w}周${tag}: ${weekCourses.length > 0 ? weekCourses.join('；') : '无课'}`);
     }
 
-    // ===== 4. 课程统计 =====
-    const courseNames = [...new Set(schedule.map(s => s.name))];
+    const courseNames = [...new Set(sch.map(s => s.name))];
     const courseStats = courseNames.map(name => {
-      const items = schedule.filter(s => s.name === name);
+      const items = sch.filter(s => s.name === name);
       const weekNums = new Set<number>();
       items.forEach(s => {
         const ws = String(s.weeks);
@@ -151,34 +269,28 @@ export function CoachPanel() {
       return `  ${name}：出现在第${weeksArr.join('、')}周`;
     }).join('\n');
 
-    // ===== 5. 全部任务 =====
-    const allTasksLines = tasks.map(t =>
+    const allTasksLines = allTasks.map(t =>
       `  [${t.completed ? '✓' : '○'}] ${t.title} | ${t.time} | ${t.tags.join(',') || '无标签'}${t.deadline ? ' | DDL:' + t.deadline : ''}${t.date ? ' | 日期:' + t.date : ''}`
     ).join('\n');
 
-    // ===== 6. 重要事项 =====
-    const impLines = importantItems.map(i =>
+    const impLines = imps.map(i =>
       `  [${i.done ? '✓' : '○'}] [${i.priority === 'high' ? '!!' : '!'}] ${i.title}${i.content ? ' - ' + i.content : ''} | 创建:${i.createdAt}`
     ).join('\n');
 
-    // ===== 7. 学习活动统计 =====
-    const studySec = activityLogs.filter(l => l.category === 'study').reduce((s, l) => s + l.duration * 60, 0);
-    const entSec = activityLogs.filter(l => l.category === 'entertainment').reduce((s, l) => s + l.duration * 60, 0);
+    const studySec = logs.filter(l => l.category === 'study').reduce((s, l) => s + l.duration * 60, 0);
+    const entSec = logs.filter(l => l.category === 'entertainment').reduce((s, l) => s + l.duration * 60, 0);
     const totalTracked = studySec + entSec;
     const studyRatio = totalTracked > 0 ? Math.round((studySec / totalTracked) * 100) : 0;
 
-    // 近7天活动
-    const recentLogs = activityLogs.slice(-30);
+    const recentLogs = logs.slice(-30);
     const recentStudySec = recentLogs.filter(l => l.category === 'study').reduce((s, l) => s + l.duration * 60, 0);
     const recentDays = [...new Set(recentLogs.map(l => l.date))].length;
     const avgStudyPerDay = recentDays > 0 ? recentStudySec / recentDays : 0;
 
-    // ===== 8. 成就系统 =====
     const achLines = achievements.map(a =>
       `  ${a.unlocked ? '🌟' : '🔒'} ${a.title}: ${a.desc} (${a.progress}/${a.total})`
     ).join('\n');
 
-    // ===== 9. 长期记忆 =====
     const memories = useMemoryStore.getState().memories;
     const highPriorityMemories = memories.filter(m => m.priority >= 7).sort((a, b) => b.priority - a.priority);
     const memoryContext = highPriorityMemories.length > 0
@@ -187,7 +299,6 @@ export function CoachPanel() {
         ).join('\n')
       : '  无';
 
-    // ===== 10. 异常检测 =====
     const ratioAlert = totalTracked > 3600 && studyRatio < 50
       ? `⚠️ 今日时间分配失衡：学习仅占${studyRatio}%，娱乐${100-studyRatio}%`
       : '';
@@ -196,8 +307,6 @@ export function CoachPanel() {
     const overdueTasks = remaining.filter(t => t.deadline && (t.deadline.includes('今天') || t.deadline.includes('昨天')));
     const procrastination = overdueTasks.length > 0;
 
-    // ===== 11. 备考分析 =====
-    // 学习断层检测
     const subjectNames: Record<SubjectKey, string> = { electronics: '电子技术基础', english: '英语', math: '高数', politics: '政治' };
     const studyGaps: string[] = [];
     const subjectLines: string[] = [];
@@ -212,17 +321,28 @@ export function CoachPanel() {
         : gapDays === 0 ? '🟢 今天已复习' : '';
       if (gapDays >= 3) studyGaps.push(`${subjectNames[key]}：${gapDays >= 999 ? '从未复习！' : gapDays + '天未复习！'}`);
       subjectLines.push(`  ${subjectNames[key]}(${key === 'electronics' ? 200 : 100}分): ${sp.totalMinutes}min | 进度:${sp.currentChapter} | 完成${sp.completedChapters.length}章 | ${gapWarning}${sp.notes ? ' | 备注:' + sp.notes : ''}`);
+      // 章节掌握状态（只输出非 mastered 的章节）
+      const cd = sp.chapterDetails || [];
+      const weakChapters = cd.filter((c: any) => c.mastery !== 'mastered');
+      if (weakChapters.length > 0) {
+        const mMap: Record<string, string> = { not_started: '未开始', learning: '学习中', review_needed: '需复习' };
+        subjectLines.push(`    薄弱章节: ${weakChapters.map((c: any) => `${c.name}(${mMap[c.mastery] || c.mastery})`).join(', ')}`);
+        // 到期需复习的章节
+        const todayStr2 = new Date().toISOString().slice(0, 10);
+        const dueReview = cd.filter((c: any) => c.nextReviewDate && c.nextReviewDate <= todayStr2 && c.mastery !== 'mastered');
+        if (dueReview.length > 0) {
+          subjectLines.push(`    ⏰ 到期待复习: ${dueReview.map((c: any) => c.name).join(', ')}`);
+        }
+      }
     });
 
-    // 考试成绩
     const examLines = examRecords.length > 0
       ? examRecords.slice(-10).reverse().map(r =>
           `  ${r.examDate} [${subjectNames[r.subject]}] ${r.examType}: ${r.score}/${r.totalScore} (${Math.round(r.score/r.totalScore*100)}%)${r.notes ? ' | 薄弱点:' + r.notes : ''}`
         ).join('\n')
       : '  暂无考试记录（AI可录入：说"记录政治选择题得分"即可）';
 
-    // 近7天各科学习时间（从 activityLogs 提取）
-    const recent7Logs = activityLogs.filter(l => {
+    const recent7Logs = logs.filter(l => {
       const logDate = parseDate(l.date);
       return (todayDate.getTime() - logDate.getTime()) <= 7 * 86400000;
     });
@@ -237,19 +357,16 @@ export function CoachPanel() {
       .map(([k, v]) => `  ${subjectNames[k as SubjectKey]}: ${v}min`)
       .join('\n') || '  暂无数据';
 
-    // 考试倒计时
-    // 专升本考试预估日期，后续可改为用户配置
     const estimatedExamDate = parseDate('2027-03-25');
     const daysUntilExam = Math.ceil((estimatedExamDate.getTime() - todayDate.getTime()) / 86400000);
     const weeksUntilExam = Math.floor(daysUntilExam / 7);
 
-    // 备考进度评估
     const totalChapters = (Object.values(subjectProgress) as SubjectProgress[]).reduce((s, sp) => s + sp.completedChapters.length, 0);
     const progressAssessment = totalChapters === 0 ? '⚠️ 尚未开始系统复习，立即行动！'
       : totalChapters < 10 ? `🟡 仅完成${totalChapters}章，进度偏慢`
       : `🟢 已完成${totalChapters}章，持续保持`;
 
-    const context = `===== 系统状态 =====
+    return `===== 系统状态 =====
 日期: ${todayFull} | 第${semesterWeek}周（共${TOTAL_WEEKS}周）
 宠物: ${pet.name} Lv.${pet.level} EXP:${pet.exp}/${pet.expToNext} | 心情:${pet.mood} | 爱心:${'❤'.repeat(pet.hearts)} | 金币:${pet.coins}
 连续打卡: ${streak}天 | 本周专注:${weekStats.focusHours}h | 完成:${weekStats.tasksCompleted}项 | 番茄:${weekStats.pomodoroCount}个 | 自动规划:${autoPlan ? '开' : '关'}
@@ -260,16 +377,19 @@ ${todayClassSummary}
 ===== 本周课表（${weekDates[0]} ~ ${weekDates[6]}） =====
 ${weekLines.join('\n')}
 
-===== 全学期课表（完整${TOTAL_WEEKS}周，AI可据此判断未来课业压力、安排备考窗口） =====
-${fullSemesterLines.join('\n')}
+===== 明日课表 =====
+${tomorrowClassSummary}
 
-===== 课程分布统计 =====
+===== 本周剩余课表 =====
+${restOfWeekLines.length > 0 ? restOfWeekLines.join('\n') : '  本周剩余无课'}
+
+===== 课程分布统计（学期全局） =====
 ${courseStats}
 
-===== 全部任务（${tasks.length}项，完成${done.length}项，未完成${remaining.length}项） =====
+===== 全部任务（${allTasks.length}项，完成${done.length}项，未完成${remaining.length}项） =====
 ${allTasksLines || '  无'}
 
-===== 重要事项（${importantItems.length}项，未完成${importantItems.filter(i => !i.done).length}项） =====
+===== 重要事项（${imps.length}项，未完成${imps.filter(i => !i.done).length}项） =====
 ${impLines || '  无'}
 
 ===== 学习活动 =====
@@ -294,14 +414,73 @@ ${studyGaps.length > 0 ? '\n⚠️ 学习断层警告:\n' + studyGaps.map(g => '
 ===== 考试成绩记录 =====
 ${examLines}
 ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多个任务临近截止' : ''}${procrastination ? '\n⚠️ 拖延：' + overdueTasks.map(t => t.title).join('、') + '已超期' : ''}`;
-
-    return context;
   };
 
+  // ====== buildStateReport ======
+  function buildStateReport(snapshot: ReturnType<typeof analyzeState>): string {
+    const { current, alerts, warnings, positives, recommendations, coachFocus, courseTimeline } = snapshot;
+    const catNames: Record<string, string> = { study: '学习', entertainment: '娱乐', social: '社交', other: '其他' };
+
+    const lines: string[] = [];
+    lines.push('===== 状态感知报告（算法生成，优先级最高） =====');
+
+    lines.push(`【当前状态】${current.dayOfWeek} ${current.period} ${current.time} | ${current.activityContext}`);
+    if (current.activeCategory) {
+      lines.push(`  前台类别: ${catNames[current.activeCategory] || current.activeCategory}`);
+    }
+
+    if (courseTimeline.length > 0) {
+      lines.push('');
+      lines.push('【今日课程时间线 — 教练必须以此为唯一依据，禁止自行推断课程状态】');
+      for (const c of courseTimeline) {
+        const marker = c.status === 'current' ? '▶ 现在' : c.status === 'upcoming' ? '○ 即将' : '✓ 已结束';
+        lines.push(`  ${marker} ${c.timeStart}-${c.timeEnd} ${c.name} @${c.location} — ${c.statusText}`);
+      }
+    } else {
+      lines.push('');
+      lines.push('【今日课程时间线】今日无课');
+    }
+
+    if (alerts.length > 0) {
+      lines.push('');
+      lines.push('【告警 — 需立即关注】');
+      for (const a of alerts) {
+        const emoji = a.level === 'critical' ? 'CRITICAL' : a.level === 'high' ? 'HIGH' : 'MEDIUM';
+        lines.push(`  [${emoji}][${a.type}] ${a.message}`);
+      }
+    }
+
+    if (warnings.length > 0) {
+      lines.push('');
+      lines.push('【注意事项】');
+      for (const w of warnings) lines.push(`  ${w}`);
+    }
+
+    if (positives.length > 0) {
+      lines.push('');
+      lines.push('【正面信号】');
+      for (const p of positives) lines.push(`  ${p}`);
+    }
+
+    if (recommendations.length > 0) {
+      lines.push('');
+      lines.push('【算法建议 — 教练必须传达给用户】');
+      for (const r of recommendations) lines.push(`  ${r}`);
+    }
+
+    if (coachFocus.length > 0) {
+      lines.push('');
+      lines.push('【教练重点关注 — 对话中必须触及这些话题】');
+      for (const f of coachFocus) lines.push(`  ${f}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  // ====== callDeepSeek ======
   const callDeepSeek = async (userContent: string) => {
-    // 日期计算
     const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const todayDateStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
     const todayFull = today.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
     const h = today.getHours();
     const m = today.getMinutes();
@@ -318,12 +497,37 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       weekDates.push(d.toISOString().slice(0, 10));
     }
 
-    const context = `【系统时间】${currentTime}\n` + buildContext(todayStr, todayFull, weekDates);
-    
-    // 构建用户上下文数据（用于 DeepSeek 服务）
+    const context = `【系统时间】${currentTime}\n` + buildContext(todayDateStr, todayFull, weekDates);
+
     const state = useStore.getState();
     const memories = useMemoryStore.getState().memories;
-    
+
+    const semesterWeek = getCurrentWeek(SEMESTER_START);
+    const stateAnalysis = analyzeState({
+      today: todayDateStr,
+      hour: h,
+      minute: m,
+      dayOfWeek,
+      activityLogs: state.activityLogs,
+      tasks: state.tasks,
+      subjectProgress: state.subjectProgress,
+      streak: state.streak,
+      achievements: state.achievements,
+      petLevel: state.pet.level,
+      petCoins: state.pet.coins,
+      schedule: state.schedule,
+      semesterWeek,
+    });
+    const stateReport = buildStateReport(stateAnalysis);
+
+    // 跨日上下文：附加上一天的对话摘要
+    let crossDayContext = '';
+    if (yesterdaySummary) {
+      crossDayContext = `\n\n【昨日对话摘要 — 教练可据此追问进展】\n昨天你和教练讨论了：${yesterdaySummary}\n如果今天的对话涉及相关内容，可以自然地问"昨天提到的XX今天做了吗？"`;
+    }
+
+    const enrichedContext = stateReport + '\n\n' + context + crossDayContext;
+
     const userContext = {
       user_id: "default_user",
       user_name: "专升本考生",
@@ -350,10 +554,10 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
         study: state.activityLogs.filter(l => l.category === 'study').reduce((s, l) => s + l.duration, 0) / 60,
         entertainment: state.activityLogs.filter(l => l.category === 'entertainment').reduce((s, l) => s + l.duration, 0) / 60
       },
-      memories: memories.slice(0, 10).map(m => ({
-        type: m.type,
-        content: m.content,
-        priority: m.priority
+      memories: memories.slice(0, 10).map(mem => ({
+        type: mem.type,
+        content: mem.content,
+        priority: mem.priority
       })),
       important_items: state.importantItems.map(i => ({
         title: i.title,
@@ -361,10 +565,9 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
         priority: i.priority,
         done: i.done
       })),
-      system_state: context
+      system_state: enrichedContext
     };
 
-    // 调用 DeepSeek API 服务
     const res = await fetch(`${API}/coach/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -373,14 +576,13 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
         context: userContext
       }),
     });
-    
+
     if (!res.ok) {
       throw new Error(`DeepSeek 服务错误: ${res.status}`);
     }
-    
+
     const d = await res.json();
-    
-    // 适配现有格式
+
     return {
       content: d.response || "AI教练暂时无法回复",
       error: !d.success ? d.error : null
@@ -389,6 +591,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
   const callDeepSeekRef = useRef(callDeepSeek);
   callDeepSeekRef.current = callDeepSeek;
 
+  // ====== extractPlan ======
   const extractPlan = (content: string): { cleanContent: string; plan?: ChatMessage['plan'] } => {
     const jsonMatch = content.match(/\{[\s\S]*"plan"[\s\S]*\}/);
     if (jsonMatch) {
@@ -403,6 +606,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
     return { cleanContent: content };
   };
 
+  // ====== extractMemories ======
   const extractMemories = (content: string): string => {
     const memRegex = /\[MEMORY:(goal|preference|insight|achievement):([^\]]+)\]/gi;
     let clean = content;
@@ -420,6 +624,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
     return clean.replace(/\[MEMORY:[^\]]+\]/gi, '').trim();
   };
 
+  // ====== executeActions ======
   const executeActions = (content: string): { cleanContent: string; summary?: string } => {
     const actionRegex = /\[ACTION:(\w+)\]\s*(\{[\s\S]*?\})/gi;
     let clean = content;
@@ -431,15 +636,29 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       try { payload = JSON.parse(match[2]); } catch { continue; }
       switch (actionName) {
         case 'add_task': {
+          const title = payload.title || '新任务';
+          // 去重：检查是否已存在标题高度相似的任务（模糊匹配）
+          const existing = tasks.find(t => {
+            const a = t.title.toLowerCase().replace(/\s+/g, '');
+            const b = title.toLowerCase().replace(/\s+/g, '');
+            // 完全包含 或 编辑距离 ≤ 3
+            if (a.includes(b) || b.includes(a)) return true;
+            const common = [...a].filter(c => b.includes(c)).length;
+            return common >= Math.max(a.length, b.length) - 3;
+          });
+          if (existing) {
+            results.push(`任务「${title}」已存在（「${existing.title}」），跳过重复添加`);
+            break;
+          }
           const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           addTask({
-            id, title: payload.title || '新任务',
+            id, title,
             period: payload.period || 'morning', time: payload.time || '',
             duration: payload.duration || 0, tags: payload.tags || [],
             completed: false, source: 'coach',
             deadline: payload.deadline, pomodoroCount: 0,
           });
-          results.push(`已添加任务「${payload.title}」`);
+          results.push(`已添加任务「${title}」`);
           break;
         }
         case 'complete_task': {
@@ -456,12 +675,21 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
         }
         case 'add_important': {
           const id = `i-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const title = payload.title || '新事项';
+          // 去重
+          const exists = importantItems.find(i => !i.done && i.title.includes(title));
+          if (exists) {
+            results.push(`重要事项「${title}」已存在（「${exists.title}」），跳过重复添加`);
+            break;
+          }
           addImportant({
-            id, title: payload.title || '新事项',
+            id, title,
             content: payload.content || '', priority: (payload.priority === 'high' ? 'high' : 'normal') as 'high' | 'normal',
             done: false, createdAt: new Date().toISOString().slice(0, 10),
+            remindAt: payload.remindAt || payload.time || undefined,
           });
-          results.push(`已添加重要事项「${payload.title}」`);
+          const remindNote = payload.remindAt ? `（${payload.remindAt}前1小时提醒）` : '';
+          results.push(`已添加重要事项「${title}」${remindNote}`);
           break;
         }
         case 'complete_important': {
@@ -522,25 +750,61 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
           results.push(`已记录${payload.subject}考试: ${payload.score}/${payload.totalScore}`);
           break;
         }
+        case 'chapter_mastery': {
+          updateChapterMastery(payload.subject, payload.chapter, payload.mastery);
+          results.push(`已更新「${payload.chapter}」掌握状态为 ${payload.mastery}`);
+          break;
+        }
+        case 'add_checklist': {
+          addStudyChecklist({
+            id: `cl-${Date.now()}`,
+            title: payload.title || '清单',
+            type: payload.type === 'verify' ? 'verify' : 'execute',
+            items: payload.items || [],
+            chapterName: payload.chapterName,
+            subject: payload.subject,
+          });
+          results.push(`已创建${payload.type === 'verify' ? '核查' : '执行'}清单「${payload.title}」`);
+          break;
+        }
+        case 'add_practice_log': {
+          addPracticeLog({
+            id: `pl-${Date.now()}`,
+            date: new Date().toISOString().slice(0, 10),
+            subject: payload.subject,
+            chapter: payload.chapter || '',
+            checklistUsed: payload.checklistUsed || '',
+            result: payload.result || '',
+            nextAction: payload.nextAction || '',
+          });
+          results.push(`已记录练习：${payload.chapter} — ${payload.result}`);
+          break;
+        }
       }
     }
     clean = clean.replace(/\[ACTION:\w+\]\s*\{[\s\S]*?\}/gi, '').trim();
     return { cleanContent: clean, summary: results.length > 0 ? results.join('；') : undefined };
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
-    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: 'user', content: input };
-    addMessage(userMsg);
-    const userText = input;
+  // ====== doSend: core send logic ======
+  const doSend = useCallback(async (text: string) => {
+    if (!text.trim() || loading) return;
+    // Always send to today's session
+    const date = getTodayStr();
+    if (activeSessionDate !== date) {
+      useStore.setState({ activeSessionDate: date });
+    }
+
+    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: 'user', content: text };
+    addMessage(date, userMsg);
     setInput('');
     setLoading(true);
 
     try {
-      const result = await callDeepSeek(userText);
+      const result = await callDeepSeek(text);
 
       if (result.error) {
-        addMessage({ id: `c-${Date.now()}`, role: 'coach', content: `AI教练出错：${result.error}` });
+        addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: `AI教练出错：${result.error}` });
         setLoading(false);
         return;
       }
@@ -551,23 +815,34 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       const { cleanContent, plan } = extractPlan(afterActions);
 
       const reply: ChatMessage = { id: `c-${Date.now()}`, role: 'coach', content: cleanContent, plan };
-      addMessage(reply);
+      addMessage(date, reply);
       if (actionSummary) {
-        addMessage({ id: `sys-${Date.now()}`, role: 'coach', content: actionSummary });
+        addMessage(date, { id: `sys-${Date.now()}`, role: 'coach', content: actionSummary });
+      }
+
+      // Voice: speak the coach reply
+      if (voiceOn && cleanContent) {
+        speak(cleanContent);
       }
     } catch (e: any) {
-      addMessage({ id: `c-${Date.now()}`, role: 'coach', content: `网络错误：${e.message}。请检查 API 服务是否启动。` });
+      addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: `网络错误：${e.message}。请检查 API 服务是否启动。` });
     }
     setLoading(false);
-  };
+  }, [loading, activeSessionDate, addMessage, voiceOn, speak]);
+
+  const handleSend = () => doSend(input);
 
   const handleOption = async (opt: string) => {
-    addMessage({ id: `u-${Date.now()}`, role: 'user', content: opt });
+    const date = getTodayStr();
+    if (activeSessionDate !== date) {
+      useStore.setState({ activeSessionDate: date });
+    }
+    addMessage(date, { id: `u-${Date.now()}`, role: 'user', content: opt });
     setLoading(true);
     try {
       const result = await callDeepSeek(opt);
       if (result.error) {
-        addMessage({ id: `c-${Date.now()}`, role: 'coach', content: `出错了：${result.error}` });
+        addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: `出错了：${result.error}` });
         setLoading(false);
         return;
       }
@@ -575,28 +850,59 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       content = extractMemories(content);
       const { cleanContent: afterActions, summary: actionSummary } = executeActions(content);
       const { cleanContent, plan } = extractPlan(afterActions);
-      addMessage({ id: `c-${Date.now()}`, role: 'coach', content: cleanContent, plan });
+      addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: cleanContent, plan });
       if (actionSummary) {
-        addMessage({ id: `sys-${Date.now()}`, role: 'coach', content: actionSummary });
+        addMessage(date, { id: `sys-${Date.now()}`, role: 'coach', content: actionSummary });
+      }
+      if (voiceOn && cleanContent) {
+        speak(cleanContent);
       }
     } catch (e: any) {
-      addMessage({ id: `c-${Date.now()}`, role: 'coach', content: `错误：${e.message}` });
+      addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: `错误：${e.message}` });
     }
     setLoading(false);
   };
 
+  // Quick action handler
+  const quickActions = [
+    { icon: '📋', label: '帮我规划今天', prompt: '根据我今天课表和未完成任务，帮我规划今天的学习计划' },
+    { icon: '😫', label: '今天状态不好', prompt: '我今天状态不太好，学不进去，怎么办？' },
+    { icon: '✅', label: '汇报进度', prompt: '我完成了一些任务，帮我看看今天整体表现怎么样' },
+    { icon: '📊', label: '周总结', prompt: '帮我总结这周的学习情况，哪些做得好哪些需要改进' },
+    { icon: '🔍', label: '分析薄弱点', prompt: '根据我的学习数据，我的薄弱环节在哪里？给我具体的改进建议' },
+    { icon: '🧪', label: '测我', prompt: '测我！随机抽一个章节出题考我，看看我到底掌握了没有' },
+  ];
+
+  const effectiveWidth = isFullWidth ? Math.min(window.innerWidth * 0.9, 900) : panelWidth;
+
+  // ====== Render ======
   return (
     <div style={{
       position: 'absolute', bottom: 12, right: 12,
-      width: 460, height: 560, background: 'var(--bg-secondary)',
+      width: effectiveWidth, height: 560, background: 'var(--bg-secondary)',
       border: '1px solid var(--border)', borderRadius: 12,
       display: 'flex', flexDirection: 'column',
       boxShadow: '0 8px 32px rgba(0,0,0,0.4)', zIndex: 100,
+      transition: isFullWidth ? 'width 0.2s ease' : 'none',
     }}>
+      {/* Left-edge drag handle */}
+      {!isFullWidth && (
+        <div
+          onMouseDown={handleDragStart}
+          style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0,
+            width: 6, cursor: 'ew-resize', zIndex: 10,
+            borderRadius: '12px 0 0 12px',
+          }}
+        />
+      )}
+
+      {/* Title bar */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '10px 14px', borderBottom: '1px solid var(--border)',
         background: 'linear-gradient(135deg, rgba(78,204,163,0.08), rgba(10,132,255,0.08))',
+        borderRadius: '12px 12px 0 0',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{
@@ -613,11 +919,14 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
             }}>V7</span>
           </div>
           <span style={{ fontSize: 10, color: 'var(--accent)' }}>● DeepSeek R1</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {/* Web search toggle */}
           <button
             onClick={() => setSearchEnabled(!searchEnabled)}
             title={searchEnabled ? '联网搜索已开启' : '联网搜索已关闭'}
             style={{
-              marginLeft: 6, padding: '2px 8px', borderRadius: 10, fontSize: 10,
+              padding: '2px 8px', borderRadius: 10, fontSize: 10,
               background: searchEnabled ? 'rgba(10,132,255,0.2)' : 'transparent',
               border: searchEnabled ? '1px solid #0a84ff' : '1px solid var(--border)',
               color: searchEnabled ? '#0a84ff' : 'var(--text-muted)',
@@ -626,107 +935,282 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
           >
             {searchEnabled ? '🌐 联网' : '🌐'}
           </button>
+          {/* Voice toggle */}
+          <button
+            onClick={() => setVoiceOn(!voiceOn)}
+            title={voiceOn ? '语音播报已开启' : '语音播报已关闭'}
+            style={{
+              padding: '2px 8px', borderRadius: 10, fontSize: 10,
+              background: voiceOn ? 'rgba(78,204,163,0.2)' : 'transparent',
+              border: voiceOn ? '1px solid #4ecca3' : '1px solid var(--border)',
+              color: voiceOn ? '#4ecca3' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            {voiceOn ? '🔊 语音' : '🔇'}
+          </button>
+          {/* Full-width toggle */}
+          <button
+            onClick={() => setIsFullWidth(!isFullWidth)}
+            title={isFullWidth ? '还原宽度' : '全宽显示'}
+            style={{
+              padding: '2px 8px', borderRadius: 10, fontSize: 10,
+              background: isFullWidth ? 'rgba(10,132,255,0.15)' : 'transparent',
+              border: isFullWidth ? '1px solid #0a84ff' : '1px solid var(--border)',
+              color: isFullWidth ? '#0a84ff' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            {isFullWidth ? '⊠ 还原' : '⛶ 全宽'}
+          </button>
+          {/* Close */}
+          <button onClick={toggleCoach} style={{
+            background: 'none', color: 'var(--text-muted)', fontSize: 18, padding: '2px 6px',
+            cursor: 'pointer', border: 'none',
+          }}>×</button>
         </div>
-        <button onClick={toggleCoach} style={{
-          background: 'none', color: 'var(--text-muted)', fontSize: 18, padding: '2px 6px',
-        }}>×</button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {(() => {
-          // 按天分组：从消息 ID 时间戳提取日期
-          const groups: { date: Date; dateKey: string; msgs: ChatMessage[] }[] = [];
-          for (const msg of messages) {
-            const ts = parseInt(msg.id.split('-')[1] || String(Date.now()));
-            const d = new Date(ts);
-            const dateKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-            const last = groups[groups.length - 1];
-            if (!last || last.dateKey !== dateKey) {
-              groups.push({ date: d, dateKey, msgs: [msg] });
-            } else {
-              last.msgs.push(msg);
-            }
-          }
-          return groups.map((g, gi) => (
-            <div key={`day-${gi}`}>
-              {/* 日期分隔线 */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 2px',
-              }}>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                <span style={{
-                  fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap',
-                  padding: '2px 10px', borderRadius: 12, background: 'var(--bg-card)',
-                  border: '1px solid var(--border)',
-                }}>
-                  {g.date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}
-                </span>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              </div>
-              {/* 当日消息 */}
-              {g.msgs.map(msg => (
-                <div key={msg.id}>
-                  <div style={{ display: 'flex', justifyContent: msg.role === 'coach' ? 'flex-start' : 'flex-end' }}>
-                    <div style={{
-                      maxWidth: '85%', padding: '8px 12px', borderRadius: 10,
-                      background: msg.role === 'coach' ? 'var(--bg-tertiary)' : 'var(--accent)',
-                      color: msg.role === 'coach' ? 'var(--text-primary)' : '#000',
-                      fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap',
-                      borderTopLeftRadius: msg.role === 'coach' ? 2 : 10,
-                      borderTopRightRadius: msg.role === 'coach' ? 10 : 2,
-                    }}>
-                      {msg.content}
-                    </div>
-                  </div>
+      {/* Session tabs */}
+      <div style={{
+        display: 'flex', gap: 4, padding: '8px 14px',
+        borderBottom: '1px solid var(--border)',
+        overflowX: 'auto', flexShrink: 0,
+        scrollbarWidth: 'none',
+      }}>
+        {tabDates.map(date => {
+          const active = date === activeSessionDate;
+          const session = sessions.find(s => s.date === date);
+          const hasMessages = session && session.messages.length > 0;
+          return (
+            <button
+              key={date}
+              onClick={() => setActiveSessionDate(date)}
+              style={{
+                padding: '4px 12px', borderRadius: 14, fontSize: 12,
+                whiteSpace: 'nowrap', cursor: 'pointer',
+                background: active ? 'var(--accent)' : 'var(--bg-tertiary)',
+                color: active ? '#000' : hasMessages ? 'var(--text-primary)' : 'var(--text-muted)',
+                border: active ? '1px solid var(--accent)' : '1px solid var(--border)',
+                fontWeight: active ? 600 : 400,
+                opacity: hasMessages || date === todayStr ? 1 : 0.5,
+                flexShrink: 0,
+              }}
+            >
+              {formatTabLabel(date, date === todayStr)}
+            </button>
+          );
+        })}
+      </div>
 
-                  {msg.options && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, paddingLeft: 4 }}>
-                      {msg.options.map(opt => (
-                        <button key={opt} onClick={() => handleOption(opt)} style={{
-                          padding: '4px 12px', borderRadius: 16,
-                          background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                          color: 'var(--text-primary)', fontSize: 11,
-                        }}>{opt}</button>
-                      ))}
-                    </div>
-                  )}
+      {/* Messages area */}
+      <div style={{
+        flex: 1, overflowY: 'auto', padding: '10px 14px',
+        display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+        {/* Yesterday summary banner (for non-today sessions) */}
+        {!isToday && currentSession?.summary && (
+          <div style={{
+            padding: '8px 12px', borderRadius: 8, fontSize: 11,
+            background: 'rgba(78,204,163,0.08)', border: '1px solid rgba(78,204,163,0.2)',
+            color: 'var(--text-secondary)', marginBottom: 4,
+          }}>
+            <span style={{ color: '#4ecca3', fontWeight: 600 }}>📝 当日摘要：</span>
+            {currentSession.summary}
+          </div>
+        )}
 
-                  {msg.plan && (
-                    <div style={{ marginTop: 6, paddingLeft: 4 }}>
-                      {msg.plan.map((p, i) => (
-                        <div key={i} style={{
-                          padding: '7px 10px', borderRadius: 8,
-                          background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-                          marginBottom: 4, fontSize: 12, display: 'flex', justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}>
-                          <div>
-                            <span style={{ color: 'var(--text-secondary)', marginRight: 8 }}>{p.time}</span>
-                            {p.title}
-                          </div>
-                          {p.tag && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(78,204,163,0.15)', color: 'var(--accent)' }}>{p.tag}</span>}
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                        <button onClick={() => {
-                          applyPlan(msg.plan);
-                          addMessage({ id: `u-${Date.now()}`, role: 'user', content: '确认应用计划' });
-                          addMessage({ id: `c-${Date.now()}`, role: 'coach', content: '计划已应用！加油~' });
-                        }} style={{ padding: '5px 14px', borderRadius: 6, background: 'var(--accent)', color: '#000', fontSize: 12, fontWeight: 500 }}>
-                          应用计划
-                        </button>
-                        <button onClick={() => handleOption('调整一下计划')} style={{
-                          padding: '5px 14px', borderRadius: 6, background: 'var(--bg-tertiary)',
-                          color: 'var(--text-secondary)', border: '1px solid var(--border)', fontSize: 12,
-                        }}>调整</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+        {/* Status card for empty today session */}
+        {isToday && isEmpty && statusCardData && (
+          <div style={{
+            padding: '16px', borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(78,204,163,0.06), rgba(10,132,255,0.06))',
+            border: '1px solid var(--border)',
+          }}>
+            {/* Header */}
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>📅</span>
+              <span>{new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</span>
+              <span style={{
+                fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 10,
+                background: 'rgba(10,132,255,0.12)', color: '#0a84ff',
+              }}>第{statusCardData.semesterWeek}周</span>
             </div>
-          ));
-        })()}
+
+            {/* Info rows */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>📚 今日课表：</span>
+                <span style={{ color: 'var(--text-primary)' }}>
+                  {statusCardData.todayClasses.length > 0
+                    ? `${statusCardData.todayClasses.length}节课`
+                    : '无课'}
+                </span>
+              </div>
+              {statusCardData.todayClasses.length > 0 && (
+                <div style={{ paddingLeft: 98 }}>
+                  {statusCardData.todayClasses.map((c, i) => (
+                    <div key={i} style={{ color: 'var(--text-secondary)', fontSize: 11, lineHeight: 1.6 }}>
+                      {c.timeStart}-{c.timeEnd} {c.name} <span style={{ color: 'var(--text-muted)' }}>@{c.location}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>📋 待完成：</span>
+                <span style={{ color: statusCardData.pendingTasks.length > 3 ? '#f59e0b' : 'var(--text-primary)' }}>
+                  {statusCardData.pendingTasks.length}个任务
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>🔥 连胜：</span>
+                <span style={{ color: 'var(--text-primary)' }}>{useStore.getState().streak}天</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>⏱ 已学习：</span>
+                <span style={{ color: 'var(--text-primary)' }}>
+                  {statusCardData.todayStudyMin >= 60
+                    ? `${Math.floor(statusCardData.todayStudyMin / 60)}h${statusCardData.todayStudyMin % 60}m`
+                    : `${statusCardData.todayStudyMin}分钟`}
+                </span>
+              </div>
+
+              {/* 今日到期复习 */}
+              {statusCardData.reviewDue.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ color: 'var(--text-muted)', minWidth: 90 }}>🔔 待复习：</span>
+                  <span style={{ color: '#f59e0b', fontSize: 11 }}>
+                    {statusCardData.reviewDue.map(r => `${r.chapter}(${r.daysAgo}天前)`).join(', ')}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Recommendations */}
+            {statusCardData.analysis.recommendations.length > 0 && (
+              <div style={{
+                padding: '10px 12px', borderRadius: 8,
+                background: 'rgba(78,204,163,0.08)', border: '1px solid rgba(78,204,163,0.15)',
+                marginBottom: 12,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#4ecca3', marginBottom: 6 }}>💡 今日建议</div>
+                {statusCardData.analysis.recommendations.slice(0, 3).map((r, i) => (
+                  <div key={i} style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                    • {r}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => doSend('你好教练，帮我分析一下今天的情况，给我一些建议')}
+                style={{
+                  flex: 1, padding: '8px 0', borderRadius: 10,
+                  background: 'var(--accent)', color: '#000',
+                  border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                }}
+              >
+                💬 开始对话
+              </button>
+              <button
+                onClick={() => {
+                  useStore.setState({ coachOpen: false });
+                  // Trigger quick start study
+                  const state = useStore.getState();
+                  const subjects = Object.entries(state.subjectProgress) as [SubjectKey, SubjectProgress][];
+                  const sorted = subjects.sort((a, b) => a[1].totalMinutes - b[1].totalMinutes);
+                  state.startStudyTimer(sorted[0][0]);
+                }}
+                style={{
+                  flex: 1, padding: '8px 0', borderRadius: 10,
+                  background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                }}
+              >
+                🎯 先学5分钟
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Empty non-today session */}
+        {!isToday && isEmpty && (
+          <div style={{
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--text-muted)', fontSize: 12,
+          }}>
+            这天没有对话记录
+          </div>
+        )}
+
+        {/* Messages */}
+        {currentMessages.map(msg => (
+          <div key={msg.id}>
+            <div style={{ display: 'flex', justifyContent: msg.role === 'coach' ? 'flex-start' : 'flex-end' }}>
+              <div style={{
+                maxWidth: '85%', padding: '8px 12px', borderRadius: 10,
+                background: msg.role === 'coach' ? 'var(--bg-tertiary)' : 'var(--accent)',
+                color: msg.role === 'coach' ? 'var(--text-primary)' : '#000',
+                fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+                borderTopLeftRadius: msg.role === 'coach' ? 2 : 10,
+                borderTopRightRadius: msg.role === 'coach' ? 10 : 2,
+              }}>
+                {msg.content}
+              </div>
+            </div>
+
+            {msg.options && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, paddingLeft: 4 }}>
+                {msg.options.map(opt => (
+                  <button key={opt} onClick={() => handleOption(opt)} style={{
+                    padding: '4px 12px', borderRadius: 16,
+                    background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                    color: 'var(--text-primary)', fontSize: 11, cursor: 'pointer',
+                  }}>{opt}</button>
+                ))}
+              </div>
+            )}
+
+            {msg.plan && (
+              <div style={{ marginTop: 6, paddingLeft: 4 }}>
+                {msg.plan.map((p, i) => (
+                  <div key={i} style={{
+                    padding: '7px 10px', borderRadius: 8,
+                    background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+                    marginBottom: 4, fontSize: 12, display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}>
+                    <div>
+                      <span style={{ color: 'var(--text-secondary)', marginRight: 8 }}>{p.time}</span>
+                      {p.title}
+                    </div>
+                    {p.tag && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(78,204,163,0.15)', color: 'var(--accent)' }}>{p.tag}</span>}
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <button onClick={() => {
+                    applyPlan(msg.plan);
+                    const date = getTodayStr();
+                    addMessage(date, { id: `u-${Date.now()}`, role: 'user', content: '确认应用计划' });
+                    addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: '计划已应用！加油~' });
+                  }} style={{
+                    padding: '5px 14px', borderRadius: 6, background: 'var(--accent)', color: '#000',
+                    fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+                  }}>
+                    应用计划
+                  </button>
+                  <button onClick={() => handleOption('调整一下计划')} style={{
+                    padding: '5px 14px', borderRadius: 6, background: 'var(--bg-tertiary)',
+                    color: 'var(--text-secondary)', border: '1px solid var(--border)', fontSize: 12, cursor: 'pointer',
+                  }}>调整</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <div style={{
@@ -738,20 +1222,48 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
         <div ref={bottomRef} />
       </div>
 
+      {/* Quick action buttons */}
+      <div style={{
+        display: 'flex', gap: 4, padding: '0 14px 6px',
+        overflowX: 'auto', flexShrink: 0,
+        scrollbarWidth: 'none',
+      }}>
+        {quickActions.map(qa => (
+          <button
+            key={qa.label}
+            onClick={() => doSend(qa.prompt)}
+            disabled={loading}
+            style={{
+              padding: '4px 10px', borderRadius: 14, fontSize: 11,
+              whiteSpace: 'nowrap', cursor: loading ? 'default' : 'pointer',
+              background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+              color: 'var(--text-secondary)', opacity: loading ? 0.5 : 1,
+              flexShrink: 0,
+            }}
+          >
+            {qa.icon} {qa.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Input area */}
       <div style={{ display: 'flex', gap: 6, padding: '10px 14px', borderTop: '1px solid var(--border)' }}>
         <input
           value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder="问任何问题：学习、编程、写作、闲聊..."
+          placeholder={isToday ? '问任何问题：学习、编程、写作、闲聊...' : '切换到今天才能发送新消息'}
+          disabled={!isToday}
           style={{
             flex: 1, padding: '7px 12px', borderRadius: 8,
             background: 'var(--bg-input)', border: '1px solid var(--border)',
             color: 'var(--text-primary)', fontSize: 12, outline: 'none',
+            opacity: isToday ? 1 : 0.5,
           }}
         />
-        <button onClick={handleSend} disabled={loading} style={{
-          padding: '7px 14px', borderRadius: 8, background: loading ? 'var(--border)' : 'var(--accent)',
-          color: '#000', fontSize: 12, fontWeight: 500, opacity: loading ? 0.5 : 1,
+        <button onClick={handleSend} disabled={loading || !isToday} style={{
+          padding: '7px 14px', borderRadius: 8, background: loading || !isToday ? 'var(--border)' : 'var(--accent)',
+          color: '#000', fontSize: 12, fontWeight: 500, opacity: loading || !isToday ? 0.5 : 1,
+          border: 'none', cursor: loading || !isToday ? 'default' : 'pointer',
         }}>发送</button>
       </div>
     </div>

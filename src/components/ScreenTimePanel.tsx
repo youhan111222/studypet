@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-
-const API = '';  // 走 Vite 代理 → /activity → 19998
+import { API } from '../config';
 
 const catMeta: Record<string, { label: string; color: string; icon: string }> = {
   study: { label: '学习', color: '#4ecca3', icon: '📖' },

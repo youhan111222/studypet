@@ -1,9 +1,11 @@
+// DEPRECATED 2026-05-28: This data is outdated.
+// New schedule from XLS: C:\Users\20397\Desktop\学生个人课表_202430000863.xls
+// See D:\.claude\memory\important-things.md for the parsed schedule.
+// DO NOT use this file for course planning. Use memory/schedule from XLS instead.
 import type { ScheduleItem } from '../types';
 
 export const scheduleData: ScheduleItem[] = [
-  {
-    "id": "s1",
-    "name": "建筑工程测量",
+    { "id": "s1", "name": "建筑工程测量",
     "day": 1,
     "timeStart": "08:20",
     "timeEnd": "09:55",

@@ -1,46 +1,45 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import type { WeekStats } from './types';
 import { Sidebar } from './components/Sidebar';
-import { TaskList } from './components/TaskList';
-import { AchievementWall } from './components/AchievementWall';
 import { CoachPanel } from './components/CoachPanel';
+import { StudyTimer } from './components/StudyTimer';
+import { Dashboard } from './components/Dashboard';
+import { QuizPanel } from './components/QuizPanel';
+import { ReviewPanel } from './components/ReviewPanel';
+import { StatsPanel } from './components/StatsPanel';
+import { TaskList } from './components/TaskList';
 import { SchedulePanel } from './components/SchedulePanel';
 import { ActivityTracker } from './components/ActivityTracker';
-import { ScreenTimePanel } from './components/ScreenTimePanel';
-import { ImportantPanel } from './components/ImportantPanel';
-import { AlertBanner } from './components/AlertBanner';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
-import { StudyTimer } from './components/StudyTimer';
-
-const API = '';  // 走 Vite 代理
+import { AchievementWall } from './components/AchievementWall';
+import { ImportantPanel } from './components/ImportantPanel';
+import { ScreenTimePanel } from './components/ScreenTimePanel';
+import { API } from './config';
 
 export default function App() {
-  const activeView = useStore(s => s.activeView);
+  const sessions = useStore(s => s.sessions);
+  const activeSessionDate = useStore(s => s.activeSessionDate);
+  const todaySession = sessions.find(s => s.date === activeSessionDate);
+  const lastMsg = todaySession?.messages[todaySession.messages.length - 1];
   const coachOpen = useStore(s => s.coachOpen);
   const toggleCoach = useStore(s => s.toggleCoach);
-  const messages = useStore(s => s.messages);
   const syncActivityLogs = useStore(s => s.syncActivityLogs);
   const updateWeekStats = useStore(s => (updates: Partial<WeekStats>) => {
     const state = useStore.getState();
     useStore.setState({ weekStats: { ...state.weekStats, ...updates } });
   });
-  const lastMsg = messages[messages.length - 1];
 
-  // 追踪服务状态 (checking → online/offline)
   const [trackerStatus, setTrackerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [retryCount, setRetryCount] = useState(0);
-  const MAX_FAST_RETRIES = 3;
+  const MAX_FAST_RETRIES = 10;
 
-  // 启动时健康检查：快速重试 3 次（间隔 2s），之后降级为慢速轮询
   useEffect(() => {
     const check = async () => {
       try {
-        const res = await fetch(`${API}/activity/stats`, { signal: AbortSignal.timeout(3000) });
-        if (res.ok) {
-          setTrackerStatus('online');
-          return;
-        }
+        const res = await fetch(`${API}/activity/stats`, { signal: AbortSignal.timeout(5000) });
+        if (res.ok) { setTrackerStatus('online'); return; }
       } catch {}
       setRetryCount(c => c + 1);
     };
@@ -49,44 +48,33 @@ export default function App() {
 
   useEffect(() => {
     if (trackerStatus !== 'checking' || retryCount >= MAX_FAST_RETRIES) return;
-    const t = setTimeout(() => setRetryCount(c => c + 1), 2000);
+    const t = setTimeout(() => setRetryCount(c => c + 1), 3000);
     return () => clearTimeout(t);
   }, [retryCount, trackerStatus]);
 
-  // 快速重试耗尽 → 降级为慢速轮询（30s 间隔），由 syncLoop 驱动恢复
   useEffect(() => {
-    if (retryCount >= MAX_FAST_RETRIES && trackerStatus === 'checking') {
-      setTrackerStatus('offline');
-    }
+    if (retryCount >= MAX_FAST_RETRIES && trackerStatus === 'checking') setTrackerStatus('offline');
   }, [retryCount, trackerStatus]);
 
-  // 用 ref 存储 trackerStatus，避免 syncLoop 依赖变化导致 interval 重建
   const trackerStatusRef = useRef(trackerStatus);
   trackerStatusRef.current = trackerStatus;
 
-  // 全局同步真实活动数据到 store，供 CoachPanel、AnalyticsPanel 等使用
   const syncLoop = useCallback(async () => {
     try {
       const res = await fetch(`${API}/activity/stats`);
       const data = await res.json();
-      if (data && (data.apps || data.totalActiveMinutes !== undefined)) {
+      if (data?.apps || data?.totalActiveMinutes !== undefined) {
         if (trackerStatusRef.current !== 'online') setTrackerStatus('online');
         const today = new Date().toISOString().slice(0, 10);
         const mapped = (data.apps || []).map((r: any, i: number) => ({
-          id: `real-${i}`,
-          appName: r.appName,
-          category: r.category,
-          startTime: '',
-          duration: r.duration,
-          date: today,
+          id: `real-${i}`, appName: r.appName, category: r.category,
+          startTime: '', duration: r.duration, date: today,
         }));
         syncActivityLogs(mapped);
-
-        const studyMinutes = (data.apps || [])
-          .filter((a: any) => a.category === 'study')
-          .reduce((sum: number, a: any) => sum + a.duration, 0);
-        const focusHours = studyMinutes / 60;
-        updateWeekStats({ focusHours });
+        const studyMinutes = data.effectiveStudyMinutes ?? (
+          (data.apps || []).filter((a: any) => a.category === 'study').reduce((s: number, a: any) => s + a.duration, 0)
+        );
+        updateWeekStats({ focusHours: studyMinutes / 60 });
       }
     } catch {
       if (trackerStatusRef.current === 'online') setTrackerStatus('offline');
@@ -99,58 +87,54 @@ export default function App() {
     return () => clearInterval(iv);
   }, [syncLoop]);
 
-  // 应用挂载时重新校准 streak（修复 persist 可能保存的过期值）
   useEffect(() => {
     const state = useStore.getState();
     const tasks = state.tasks;
     const today = new Date().toISOString().slice(0, 10);
-    // 收集所有有完成记录的任务的日期集合
     const completedDates = new Set<string>();
-    tasks.forEach(t => {
-      if (t.completed) completedDates.add(t.date || today);
-    });
-    // 重新从今天往回计算连续天数
+    tasks.forEach(t => { if (t.completed) completedDates.add(t.date || today); });
     let streak = 0;
     const now = new Date();
     for (let i = 0; i < 365; i++) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().slice(0, 10);
-      if (completedDates.has(dateStr)) streak++;
+      const d = new Date(now); d.setDate(d.getDate() - i);
+      if (completedDates.has(d.toISOString().slice(0, 10))) streak++;
       else break;
     }
-    if (streak !== state.streak) {
-      useStore.setState({ streak });
-    }
+    if (streak !== state.streak) useStore.setState({ streak });
   }, []);
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <AlertBanner />
       <Sidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         <StudyTimer />
-        {/* 追踪服务离线提示 */}
         {trackerStatus === 'offline' && (
           <div style={{
             background: '#f59e0b15', borderBottom: '1px solid #f59e0b40',
             padding: '6px 16px', fontSize: 12, color: '#f59e0b',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            <span>⚠ 屏幕时间追踪未启动 — 请运行 <b>start_all.bat</b> 或执行 <b>python tracker.py &amp;&amp; python api_server.py</b></span>
+            <span>⚠ 屏幕时间追踪未启动 — 运行 <b>StudyPet_Launcher.ps1</b></span>
             <button onClick={() => { setTrackerStatus('checking'); setRetryCount(0); }} style={{
               padding: '2px 10px', borderRadius: 10, border: '1px solid #f59e0b60',
               background: 'transparent', color: '#f59e0b', cursor: 'pointer', fontSize: 11,
             }}>重试</button>
           </div>
         )}
-        {activeView === 'tasks' && <TaskList />}
-        {activeView === 'important' && <ImportantPanel />}
-        {activeView === 'achievements' && <AchievementWall />}
-        {activeView === 'schedule' && <SchedulePanel />}
-        {activeView === 'tracking' && <ActivityTracker />}
-        {activeView === 'screentime' && <ScreenTimePanel />}
-        {activeView === 'analytics' && <AnalyticsPanel />}
+
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/quiz/:subject" element={<QuizPanel />} />
+          <Route path="/review" element={<ReviewPanel />} />
+          <Route path="/stats" element={<StatsPanel />} />
+          <Route path="/tasks" element={<TaskList />} />
+          <Route path="/schedule" element={<SchedulePanel />} />
+          <Route path="/tracking" element={<ActivityTracker />} />
+          <Route path="/analytics" element={<AnalyticsPanel />} />
+          <Route path="/achievements" element={<AchievementWall />} />
+          <Route path="/important" element={<ImportantPanel />} />
+          <Route path="/screentime" element={<ScreenTimePanel />} />
+        </Routes>
 
         {coachOpen ? (
           <CoachPanel />
@@ -166,8 +150,8 @@ export default function App() {
             <div style={{
               width: 32, height: 32, borderRadius: '50%',
               background: 'linear-gradient(135deg, #4ecca3, #0a84ff)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 16, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+              flexShrink: 0,
             }}>🐱</div>
             <div style={{
               fontSize: 12, color: 'var(--text-secondary)',

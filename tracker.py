@@ -11,7 +11,9 @@ import json
 import time
 import sqlite3
 import os
+import math
 import logging
+from collections import Counter
 from datetime import datetime
 import ctypes
 from ctypes import wintypes
@@ -22,13 +24,14 @@ sys.stdout.reconfigure(encoding='utf-8') if hasattr(sys.stdout, 'reconfigure') e
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracker.log")
 # 确保日志文件使用 UTF-8 编码
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s',
     handlers=[
         logging.FileHandler(LOG_FILE, encoding='utf-8'),
     ]
 )
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 logger.info("=== tracker.py 启动 ===")
 
 def safe_print(obj):
@@ -61,9 +64,31 @@ CREATE TABLE IF NOT EXISTS activity (
 # 兼容旧表结构（无 is_idle 列）
 try:
     conn.execute("ALTER TABLE activity ADD COLUMN is_idle INTEGER DEFAULT 0")
-except:
+except Exception:
     pass
+conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_date ON activity(date)")
+conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_date_category ON activity(date, category)")
 conn.commit()
+
+_ACTIVITY_INSERT = (
+    "INSERT INTO activity (window_title, process_name, category, start_time, duration_seconds, date, is_idle) "
+    "VALUES (?,?,?,?,?,?,?)"
+)
+
+
+def _write_activity(params, is_idle=0, label="活动记录", attempts=3, backoff=0.5):
+    """写入活动记录，SQLite 锁冲突时重试，避免静默丢数据"""
+    for attempt in range(attempts):
+        try:
+            conn.execute(_ACTIVITY_INSERT, (*params, is_idle))
+            conn.commit()
+            return True
+        except sqlite3.OperationalError as e:
+            if attempt < attempts - 1:
+                time.sleep(backoff * (attempt + 1))
+                continue
+            logger.warning(f"写入{label}失败 (db locked?): {e}")
+    return False
 
 # === Windows API 获取前台窗口 ===
 user32 = ctypes.windll.user32
@@ -110,6 +135,7 @@ def get_active_window_info():
 
     # 进程名 — 权限拒绝时分三级降级
     proc = "unknown"
+    h_process = None
     try:
         pid = wintypes.DWORD()
         ret = user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
@@ -120,18 +146,16 @@ def get_active_window_info():
                 return title, proc
             return title, "unknown"
 
+        # 尝试完整权限打开进程
         h_process = kernel32.OpenProcess(0x0400 | 0x0010, False, pid.value)
         if not h_process:
             err = kernel32.GetLastError()
             if err == 5:  # ACCESS_DENIED — 系统进程
                 proc = "system"
-            else:
-                # 尝试只读权限重试
-                h_process = kernel32.OpenProcess(0x0010, False, pid.value)
-                if not h_process:
-                    proc = "protected"
-            if proc != "unknown":
-                return title, proc
+            # 尝试只读权限重试
+            h_process = kernel32.OpenProcess(0x0010, False, pid.value)
+            if not h_process:
+                proc = "protected"
 
         if h_process:
             exe_buf = ctypes.create_unicode_buffer(260)
@@ -141,12 +165,14 @@ def get_active_window_info():
             else:
                 err = kernel32.GetLastError()
                 proc = "protected" if err == 5 else "unknown"
-            kernel32.CloseHandle(h_process)
-        else:
+        elif proc == "unknown":
             proc = "protected"
     except Exception:
         proc = "protected"
         return title, proc
+    finally:
+        if h_process:
+            kernel32.CloseHandle(h_process)
 
     # UWP 应用修复：ApplicationFrameHost.exe 代理了所有 UWP 窗口
     # 此时用窗口标题作为进程名，确保分类和统计正确
@@ -198,9 +224,6 @@ def get_idle_seconds():
 # === TF-IDF 应用分类器 ===
 # 不再死板关键词匹配，而是基于特征向量相似度评分
 # 已知应用用关键词快速命中，未知应用用 n-gram 向量推断
-
-import math
-from collections import Counter
 
 # 训练语料：每个分类有多个"文档"（关键词组）
 CATEGORY_TRAINING = [
@@ -361,23 +384,18 @@ try:
             date_str = datetime.now().strftime("%Y-%m-%d")
 
             is_idle = idle_sec >= IDLE_THRESHOLD_SEC
-            logger.debug(f"窗口: {proc} - {title[:30]}, 空闲: {idle_sec}s, 空闲状态: {is_idle}")
 
             if is_idle:
                 # 空闲超时：记录上一次活动的时长，然后进入空闲状态
                 if not last_idle_logged and last_proc:
                     duration = int(now - last_start)
                     cat = classify(last_title, last_proc)
-                    try:
-                        conn.execute(
-                            "INSERT INTO activity (window_title, process_name, category, start_time, duration_seconds, date, is_idle) VALUES (?,?,?,?,?,?,0)",
-                            (last_title, last_proc, cat,
-                             datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-                             duration, date_str)
-                        )
-                        conn.commit()
-                    except sqlite3.OperationalError as e:
-                        logger.warning(f"写入空闲记录失败 (db locked?): {e}")
+                    _write_activity(
+                        (last_title, last_proc, cat,
+                         datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                         duration, date_str),
+                        is_idle=0, label="空闲记录"
+                    )
                     safe_print({
                         "event": "idle_start",
                         "from": last_proc, "duration": duration,
@@ -392,16 +410,12 @@ try:
                 # 如果刚从空闲恢复，先写入空闲记录
                 if last_idle_logged and idle_start_time > 0:
                     idle_duration = int(now - idle_start_time)
-                    try:
-                        conn.execute(
-                            "INSERT INTO activity (window_title, process_name, category, start_time, duration_seconds, date, is_idle) VALUES (?,?,?,?,?,?,1)",
-                            ('空闲', 'idle', 'idle',
-                             datetime.fromtimestamp(idle_start_time).strftime("%Y-%m-%d %H:%M:%S"),
-                             idle_duration, date_str)
-                        )
-                        conn.commit()
-                    except sqlite3.OperationalError as e:
-                        logger.warning(f"写入空闲恢复记录失败: {e}")
+                    _write_activity(
+                        ('空闲', 'idle', 'idle',
+                         datetime.fromtimestamp(idle_start_time).strftime("%Y-%m-%d %H:%M:%S"),
+                         idle_duration, date_str),
+                        is_idle=1, label="空闲恢复记录"
+                    )
                     safe_print({
                         "event": "idle_end",
                         "idle_duration": idle_duration,
@@ -414,16 +428,12 @@ try:
                 if last_proc and not last_idle_logged:
                     duration = int(now - last_start)
                     cat = classify(last_title, last_proc)
-                    try:
-                        conn.execute(
-                            "INSERT INTO activity (window_title, process_name, category, start_time, duration_seconds, date, is_idle) VALUES (?,?,?,?,?,?,0)",
-                            (last_title, last_proc, cat,
-                             datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-                             duration, date_str)
-                        )
-                        conn.commit()
-                    except sqlite3.OperationalError as e:
-                        logger.warning(f"写入窗口切换记录失败: {e}")
+                    _write_activity(
+                        (last_title, last_proc, cat,
+                         datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                         duration, date_str),
+                        is_idle=0, label="窗口切换记录"
+                    )
                     safe_print({
                         "event": "switch",
                         "from": last_proc, "to": proc,
@@ -451,16 +461,12 @@ except KeyboardInterrupt:
     if last_proc and not last_idle_logged:
         duration = int(time.time() - last_start)
         cat = classify(last_title, last_proc)
-        try:
-            conn.execute(
-                "INSERT INTO activity (window_title, process_name, category, start_time, duration_seconds, date, is_idle) VALUES (?,?,?,?,?,?,0)",
-                (last_title, last_proc, cat,
-                 datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-                 duration, datetime.now().strftime("%Y-%m-%d"))
-            )
-            conn.commit()
+        if _write_activity(
+            (last_title, last_proc, cat,
+             datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+             duration, datetime.now().strftime("%Y-%m-%d")),
+            is_idle=0, label="最后活动记录"
+        ):
             logger.info(f"保存最后活动: {last_proc} ({duration}s)")
-        except sqlite3.OperationalError:
-            logger.warning("保存最后活动时数据库异常，忽略")
     conn.close()
     logger.info("数据库连接关闭，退出完成")

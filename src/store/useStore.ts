@@ -1,6 +1,6 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Task, Pet, Achievement, ChatMessage, CoachMode, WeekStats, ScheduleItem, ActivityLog, AppView, ImportantItem, SubjectProgress, SubjectKey, ExamRecord } from '../types';
+import type { Task, Pet, Achievement, ChatMessage, ChatSession, CoachMode, WeekStats, ScheduleItem, ActivityLog, AppView, ImportantItem, SubjectProgress, SubjectKey, ExamRecord, MasteryLevel, StudyChecklist, PracticeLog } from '../types';
 // 用户真实专科课表（建筑工程相关），非假数据
 import { scheduleData } from './scheduleData';
 
@@ -22,20 +22,25 @@ function inferSubjectFromTitle(title: string): SubjectKey | null {
 }
 
 interface Store {
-  tasks: Task[]; pet: Pet; achievements: Achievement[]; messages: ChatMessage[];
+  tasks: Task[]; pet: Pet; achievements: Achievement[]; sessions: ChatSession[]; activeSessionDate: string;
   coachMode: CoachMode; weekStats: WeekStats; streak: number; activeView: AppView;
   coachOpen: boolean; addTaskOpen: boolean; schedule: ScheduleItem[]; activityLogs: ActivityLog[]; autoPlan: boolean;
   importantItems: ImportantItem[];
   subjectProgress: Record<SubjectKey, SubjectProgress>;
+  studyChecklists: StudyChecklist[];
+  practiceLogs: PracticeLog[];
   toggleTask: (id: string) => void; addTask: (task: Task) => void; deleteTask: (id: string) => void;
-  setCoachMode: (mode: CoachMode) => void; addMessage: (msg: ChatMessage) => void;
+  setCoachMode: (mode: CoachMode) => void; addMessage: (date: string, msg: ChatMessage) => void; updateSessionSummary: (date: string, summary: string) => void;
   toggleCoach: () => void; setView: (view: AppView) => void; toggleAddTask: () => void;
   applyPlan: (plan: ChatMessage['plan']) => void; addScheduleItem: (item: ScheduleItem) => void; updateScheduleItem: (id: string, updates: Partial<Pick<ScheduleItem, 'timeStart' | 'timeEnd' | 'location'>>) => void;
   importSchedule: (items: ScheduleItem[]) => void; clearSchedule: () => void;
-  addLogs: (logs: ActivityLog[]) => void; toggleAutoPlan: () => void;
+  toggleAutoPlan: () => void;
   syncActivityLogs: (logs: ActivityLog[]) => void;
   addImportant: (item: ImportantItem) => void; toggleImportant: (id: string) => void; deleteImportant: (id: string) => void;
   updateSubjectProgress: (subject: SubjectKey, updates: Partial<SubjectProgress>) => void;
+  updateChapterMastery: (subject: SubjectKey, chapter: string, mastery: MasteryLevel) => void;
+  addStudyChecklist: (checklist: StudyChecklist) => void; toggleChecklistItem: (checklistId: string, itemIndex: number) => void; deleteStudyChecklist: (id: string) => void;
+  addPracticeLog: (log: PracticeLog) => void;
   examRecords: ExamRecord[];
   addExamRecord: (record: ExamRecord) => void;
   deleteExamRecord: (id: string) => void;
@@ -66,11 +71,15 @@ export const ACHIEVEMENT_DEFS: Record<string, AchievementDef> = {
   a1: { id: 'a1', icon: '🔥', title: '初露锋芒', desc: '连续3天完成任务', total: 3,
     onStateTick: ({ streak }) => streak },
   a2: { id: 'a2', icon: '⚡', title: '深度专注', desc: '单次专注3小时', total: 3,
-    onTaskComplete: ({ task }) => task.duration >= 180 ? 1 : 0 },
+    onTaskComplete: ({ task, state }) => {
+      const current = state.achievements.find(a => a.id === 'a2')?.progress || 0;
+      return current + (task.duration >= 180 ? 1 : 0);
+    }},
   a3: { id: 'a3', icon: '🌅', title: '早起鸟儿', desc: '7点前开始学习', total: 1,
-    onTaskComplete: () => {
+    onTaskComplete: ({ state }) => {
       const hour = new Date().getHours();
-      return hour < 7 ? 1 : 0;
+      const current = state.achievements.find(a => a.id === 'a3')?.progress || 0;
+      return Math.max(current, hour < 7 ? 1 : 0);
     }},
   a4: { id: 'a4', icon: '🏆', title: '全勤月', desc: '本月每天都有学习', total: 30,
     onStateTick: ({ state, streak }) => {
@@ -116,16 +125,17 @@ const defaultSchedule: ScheduleItem[] = scheduleData;
 
 const defaultLogs: ActivityLog[] = []; // 初始为空，由 tracker 填充
 
-const defaultMessages: ChatMessage[] = [];
-
 const defaultImportant: ImportantItem[] = [];
 
 const defaultSubjectProgress: Record<SubjectKey, SubjectProgress> = {
-  english: { lastStudyDate: '', totalMinutes: 0, completedChapters: [], currentChapter: '', notes: '' },
-  math: { lastStudyDate: '', totalMinutes: 0, completedChapters: [], currentChapter: '', notes: '' },
-  politics: { lastStudyDate: '', totalMinutes: 0, completedChapters: [], currentChapter: '', notes: '' },
-  electronics: { lastStudyDate: '', totalMinutes: 0, completedChapters: [], currentChapter: '', notes: '' },
+  english: { lastStudyDate: '', totalMinutes: 0, completedChapters: [], currentChapter: '', notes: '', chapterDetails: [] },
+  math: { lastStudyDate: '', totalMinutes: 0, completedChapters: [], currentChapter: '', notes: '', chapterDetails: [] },
+  politics: { lastStudyDate: '', totalMinutes: 0, completedChapters: [], currentChapter: '', notes: '', chapterDetails: [] },
+  electronics: { lastStudyDate: '', totalMinutes: 0, completedChapters: [], currentChapter: '', notes: '', chapterDetails: [] },
 };
+
+const defaultChecklists: StudyChecklist[] = [];
+const defaultPracticeLogs: PracticeLog[] = [];
 
 const defaultExamRecords: ExamRecord[] = [];
 
@@ -145,7 +155,8 @@ export const useStore = create<Store>()(
       tasks: defaultTasks,
       pet: defaultPet,
       achievements: defaultAchievements,
-      messages: defaultMessages,
+      sessions: [],
+      activeSessionDate: new Date().toISOString().slice(0, 10),
       coachMode: 'preview' as CoachMode,
       weekStats: { focusHours: 0, tasksCompleted: 0, pomodoroCount: 0, tasksSkipped: 0 },
       streak: 0,
@@ -158,6 +169,8 @@ export const useStore = create<Store>()(
       importantItems: defaultImportant,
       subjectProgress: defaultSubjectProgress,
       examRecords: defaultExamRecords,
+      studyChecklists: defaultChecklists,
+      practiceLogs: defaultPracticeLogs,
       activeTimerSubject: null,
       timerStartTime: null,
       timerAccumulatedSeconds: 0,
@@ -170,13 +183,19 @@ export const useStore = create<Store>()(
         const today = new Date().toISOString().slice(0, 10);
         
         if (task?.completed) {
-          // 1. 宠物经验与金币
+          // 1. 宠物经验、金币、爱心
           let pet = { ...state.pet };
           pet.exp += 50; pet.coins += 10;
-          if (pet.exp >= pet.expToNext) { 
-            pet.exp -= pet.expToNext; 
-            pet.level += 1; 
-            pet.expToNext = Math.floor(pet.expToNext * 1.2); 
+          pet.hearts = Math.min(5, pet.hearts + 1);
+          // 集满 5 颗爱心获得额外金币奖励
+          if (pet.hearts === 5) {
+            pet.coins += 20;
+            pet.hearts = 0;
+          }
+          if (pet.exp >= pet.expToNext) {
+            pet.exp -= pet.expToNext;
+            pet.level += 1;
+            pet.expToNext = Math.floor(pet.expToNext * 1.2);
           }
           pet.mood = 'happy';
           updates.pet = pet;
@@ -251,8 +270,30 @@ export const useStore = create<Store>()(
       })),
       deleteTask: (id) => set(state => ({ tasks: state.tasks.filter(t => t.id !== id) })),
       setCoachMode: (mode) => set({ coachMode: mode }),
-      addMessage: (msg) => set(state => ({ messages: [...state.messages, msg] })),
-      toggleCoach: () => set(state => ({ coachOpen: !state.coachOpen })),
+      addMessage: (date, msg) => set(state => {
+        const sessions = [...state.sessions];
+        const idx = sessions.findIndex(s => s.date === date);
+        const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        const d = new Date(date);
+        const label = `${d.getMonth() + 1}月${d.getDate()}日 ${dayNames[d.getDay()]}`;
+        if (idx >= 0) {
+          sessions[idx] = { ...sessions[idx], messages: [...sessions[idx].messages, msg] };
+        } else {
+          sessions.push({ id: date, date, label, messages: [msg] });
+        }
+        // 保持最近 30 天
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 30);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        return { sessions: sessions.filter(s => s.date >= cutoffStr) };
+      }),
+      updateSessionSummary: (date, summary) => set(state => ({
+        sessions: state.sessions.map(s => s.date === date ? { ...s, summary } : s)
+      })),
+      toggleCoach: () => set(state => {
+        const today = new Date().toISOString().slice(0, 10);
+        return { coachOpen: !state.coachOpen, activeSessionDate: today };
+      }),
       setView: (view) => set({ activeView: view }),
       toggleAddTask: () => set(state => ({ addTaskOpen: !state.addTaskOpen })),
       applyPlan: (plan) => {
@@ -267,7 +308,7 @@ export const useStore = create<Store>()(
           id: `plan-${Date.now()}-${i}`, title: p.title, period: getPeriod(p.time),
           time: p.time, duration: 60, tags: p.tag ? [p.tag] : [],
           completed: false, source: p.source || 'manual', pomodoroCount: 0,
-          date: (p as any).date || new Date().toISOString().slice(0, 10),
+          date: p.date || new Date().toISOString().slice(0, 10),
         }));
         set(state => ({ tasks: [...state.tasks.filter(t => !t.id.startsWith('plan-')), ...newTasks] }));
       },
@@ -277,8 +318,11 @@ export const useStore = create<Store>()(
       })),
       importSchedule: (items) => set({ schedule: items }),
       clearSchedule: () => set({ schedule: defaultSchedule }),
-      addLogs: (logs) => set(state => ({ activityLogs: [...state.activityLogs, ...logs] })),
-  syncActivityLogs: (logs) => set({ activityLogs: logs }),
+      syncActivityLogs: (logs) => set(state => {
+        const byId = new Map(state.activityLogs.map(l => [l.id, l]));
+        for (const l of logs) byId.set(l.id, l);
+        return { activityLogs: Array.from(byId.values()) };
+      }),
       toggleAutoPlan: () => set(state => ({ autoPlan: !state.autoPlan })),
       addImportant: (item) => set(state => ({ importantItems: [...state.importantItems, item] })),
       toggleImportant: (id) => set(state => ({
@@ -297,10 +341,43 @@ export const useStore = create<Store>()(
       deleteExamRecord: (id) => set(state => ({
         examRecords: state.examRecords.filter(r => r.id !== id),
       })),
+      // ====== 知识体系：章节掌握 + 学习清单 + 刻意练习 ======
+      updateChapterMastery: (subject, chapter, mastery) => set(state => {
+        const today = new Date().toISOString().slice(0, 10);
+        const details = [...state.subjectProgress[subject].chapterDetails];
+        const idx = details.findIndex(c => c.name === chapter);
+        const nextMap: Record<MasteryLevel, number> = { not_started: 1, learning: 2, review_needed: 1, mastered: 7 };
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + (nextMap[mastery] || 3));
+        const nextReview = nextDate.toISOString().slice(0, 10);
+        if (idx >= 0) {
+          details[idx] = { ...details[idx], mastery, lastReviewDate: today, reviewCount: details[idx].reviewCount + 1, nextReviewDate: nextReview };
+        } else {
+          details.push({ name: chapter, mastery, lastReviewDate: today, reviewCount: 1, nextReviewDate: nextReview });
+        }
+        return {
+          subjectProgress: { ...state.subjectProgress, [subject]: { ...state.subjectProgress[subject], chapterDetails: details, lastStudyDate: today } },
+        };
+      }),
+      addStudyChecklist: (checklist) => set(state => ({ studyChecklists: [...state.studyChecklists, checklist] })),
+      toggleChecklistItem: (checklistId, itemIndex) => set(state => ({
+        studyChecklists: state.studyChecklists.map(c =>
+          c.id === checklistId ? {
+            ...c,
+            doneIndexes: c.doneIndexes?.includes(itemIndex)
+              ? c.doneIndexes.filter(i => i !== itemIndex)
+              : [...(c.doneIndexes || []), itemIndex],
+          } : c
+        ),
+      })),
+      deleteStudyChecklist: (id) => set(state => ({ studyChecklists: state.studyChecklists.filter(c => c.id !== id) })),
+      addPracticeLog: (log) => set(state => ({ practiceLogs: [...state.practiceLogs, log] })),
       // ====== 学习计时器 ======
       startStudyTimer: (subject) => {
         const state = useStore.getState();
         const now = Date.now();
+        // 同一科目计时中，不做任何事（防止重置）
+        if (state.activeTimerSubject === subject && state.timerStartTime !== null) return;
         // 如果已有其他科目的活跃计时，先停止它
         if (state.activeTimerSubject && state.activeTimerSubject !== subject) {
           const elapsed = state.timerAccumulatedSeconds + (state.timerStartTime ? (now - state.timerStartTime) / 1000 : 0);
@@ -364,28 +441,64 @@ export const useStore = create<Store>()(
     }),
     {
       name: 'studypet-data',
-      version: 3,
+      version: 4,
       migrate: (persisted: any, version: number) => {
-        // v2 → v3: reset schedule to use real course data
         if (version < 3) {
           persisted.state.schedule = scheduleData;
         }
+        // v3 → v4: 将旧 messages[] 迁移为 sessions[]
+        if (version < 4 && persisted.state?.messages) {
+          const oldMessages: ChatMessage[] = persisted.state.messages || [];
+          const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+          const sessionMap: Record<string, ChatMessage[]> = {};
+          for (const msg of oldMessages) {
+            const ts = parseInt(msg.id.split('-')[1] || String(Date.now()));
+            const date = new Date(ts).toISOString().slice(0, 10);
+            if (!sessionMap[date]) sessionMap[date] = [];
+            sessionMap[date].push(msg);
+          }
+          const sessions: ChatSession[] = Object.entries(sessionMap)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, msgs]) => {
+              const d = new Date(date);
+              return { id: date, date, label: `${d.getMonth() + 1}月${d.getDate()}日 ${dayNames[d.getDay()]}`, messages: msgs };
+            });
+          persisted.state.sessions = sessions;
+          persisted.state.activeSessionDate = new Date().toISOString().slice(0, 10);
+          delete persisted.state.messages;
+        }
+        // 确保 subjectProgress 中每个科目都有 chapterDetails
+        if (persisted.state?.subjectProgress) {
+          for (const key of ['english', 'math', 'politics', 'electronics']) {
+            if (persisted.state.subjectProgress[key] && !persisted.state.subjectProgress[key].chapterDetails) {
+              persisted.state.subjectProgress[key].chapterDetails = [];
+            }
+          }
+        }
         return persisted;
       },
-      partialize: (state) => ({
-        tasks: state.tasks,
-        pet: state.pet,
-        achievements: state.achievements,
-        streak: state.streak,
-        weekStats: state.weekStats,
-        schedule: state.schedule,
-        autoPlan: state.autoPlan,
-        importantItems: state.importantItems,
-        activityLogs: state.activityLogs,
-        subjectProgress: state.subjectProgress,
-        examRecords: state.examRecords,
-        messages: state.messages.slice(-50),
-      }),
+      partialize: (state) => {
+        // 30 天裁剪：只保留近期数据，防止 localStorage 无限膨胀
+        const cutoff30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+        const cutoffYear = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+        return {
+          tasks: state.tasks.filter(t => !t.completed || (t.date ? t.date >= cutoff30 : true)),
+          pet: state.pet,
+          achievements: state.achievements,
+          streak: state.streak,
+          weekStats: state.weekStats,
+          schedule: state.schedule,
+          autoPlan: state.autoPlan,
+          importantItems: state.importantItems.filter(i => !i.done || i.createdAt >= cutoff30),
+          activityLogs: state.activityLogs.filter(l => l.date >= cutoff30),
+          subjectProgress: state.subjectProgress,
+          examRecords: state.examRecords.filter(r => r.examDate >= cutoffYear),
+          sessions: state.sessions.slice(-60), // 保留最多 60 个 session
+          activeSessionDate: state.activeSessionDate,
+          studyChecklists: state.studyChecklists,
+          practiceLogs: state.practiceLogs.slice(-100), // 保留最近100条练习记录
+        };
+      },
       merge: (persisted, current) => {
         try {
           const p = persisted as Partial<Store>;
@@ -402,7 +515,10 @@ export const useStore = create<Store>()(
             activityLogs: p.activityLogs ?? current.activityLogs,
             subjectProgress: p.subjectProgress ?? current.subjectProgress,
             examRecords: p.examRecords ?? current.examRecords,
-            messages: p.messages ?? current.messages,
+            sessions: p.sessions ?? current.sessions,
+            activeSessionDate: p.activeSessionDate ?? current.activeSessionDate,
+            studyChecklists: p.studyChecklists ?? current.studyChecklists,
+            practiceLogs: p.practiceLogs ?? current.practiceLogs,
           };
         } catch {
           // localStorage 数据损坏 → 尝试 sessionStorage 备份
@@ -425,7 +541,10 @@ export const useStore = create<Store>()(
                   activityLogs: p.activityLogs ?? current.activityLogs,
                   subjectProgress: p.subjectProgress ?? current.subjectProgress,
                   examRecords: p.examRecords ?? current.examRecords,
-                  messages: p.messages ?? current.messages,
+                  sessions: p.sessions ?? current.sessions,
+  activeSessionDate: p.activeSessionDate ?? current.activeSessionDate,
+                  studyChecklists: p.studyChecklists ?? current.studyChecklists,
+                  practiceLogs: p.practiceLogs ?? current.practiceLogs,
                 };
               }
             } catch { /* 连 session 备份也损坏，回退默认值 */ }

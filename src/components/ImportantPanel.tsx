@@ -61,7 +61,7 @@ export function ImportantPanel() {
             fontFamily: 'inherit', marginBottom: 8,
           }} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select value={priority} onChange={e => setPriority(e.target.value as any)} style={{
+            <select value={priority} onChange={e => setPriority(e.target.value as 'high' | 'normal')} style={{
               padding: '5px 10px', borderRadius: 6,
               background: 'var(--bg-input)', border: '1px solid var(--border)',
               color: 'var(--text-primary)', fontSize: 12, outline: 'none',

@@ -1,7 +1,7 @@
 # StudyPet 开机自启动脚本 - PowerShell 版本
-# 保存到: C:\Users\20397\AppData\Roaming\Tencent\Marvis\User\oAN1i2ZjLT5YmQ9HqB9GvXbz5HPA\workspace\conv_19e4b810f7c_ce9c80399e5b\output\StudyPet\Start-StudyPet.ps1
+# 保存到: D:\StudyPet\Start-StudyPet.ps1
 
-$WorkingDir = "C:\Users\20397\AppData\Roaming\Tencent\Marvis\User\oAN1i2ZjLT5YmQ9HqB9GvXbz5HPA\workspace\conv_19e4b810f7c_ce9c80399e5b\output\StudyPet"
+$WorkingDir = "D:\StudyPet"
 $LogFile = "$WorkingDir\startup.log"
 $APIUrl = "http://127.0.0.1:19998/api/coach/health"
 

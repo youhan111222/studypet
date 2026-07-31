@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import type { Task, Period } from '../types';
 
@@ -108,6 +108,13 @@ export function TaskList() {
           );
         })}
       </div>
+
+      <style>{`
+        @keyframes float-up {
+          0% { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-24px); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -122,6 +129,19 @@ function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
   const [optA, optB] = isChoice && choiceMatch ? [choiceMatch[1].trim(), choiceMatch[2].trim()] : ['', ''];
 
   const [chosen, setChosen] = useState<'A' | 'B' | null>(task.completed ? 'A' : null);
+
+  // 完成任务时的飘字动画
+  const [floatAnim, setFloatAnim] = useState(false);
+  const prevCompleted = useRef(task.completed);
+  useEffect(() => {
+    if (task.completed && !prevCompleted.current) {
+      setFloatAnim(true);
+      const t = setTimeout(() => setFloatAnim(false), 800);
+      prevCompleted.current = true;
+      return () => clearTimeout(t);
+    }
+    prevCompleted.current = task.completed;
+  }, [task.completed]);
 
   const handleChoice = (pick: 'A' | 'B') => {
     setChosen(pick);
@@ -142,7 +162,17 @@ function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
         background: task.completed ? 'rgba(78,204,163,0.08)' : 'var(--bg-card)',
         border: `1px solid ${task.completed ? 'rgba(78,204,163,0.2)' : 'var(--border)'}`,
         opacity: task.completed ? 0.6 : 1, transition: 'all 0.2s',
+        position: 'relative', overflow: 'hidden',
       }}>
+        {/* 完成飘字动画 */}
+        {floatAnim && (
+          <span style={{
+            position: 'absolute', right: 12, top: '50%',
+            fontSize: 13, fontWeight: 700, color: '#4ecca3',
+            animation: 'float-up 0.8s ease-out forwards',
+            pointerEvents: 'none', zIndex: 10,
+          }}>+50XP +10🪙</span>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
           <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(168,85,247,0.15)', color: 'var(--purple)', fontWeight: 600 }}>二选一</span>
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>⏰ {task.time}</span>
@@ -209,7 +239,17 @@ function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
       background: task.completed ? 'rgba(78,204,163,0.08)' : 'var(--bg-card)',
       border: `1px solid ${task.completed ? 'rgba(78,204,163,0.2)' : 'var(--border)'}`,
       opacity: task.completed ? 0.6 : 1, transition: 'all 0.2s',
+      position: 'relative', overflow: 'hidden',
     }}>
+      {/* 完成飘字动画 */}
+      {floatAnim && (
+        <span style={{
+          position: 'absolute', right: 12, top: '50%',
+          fontSize: 13, fontWeight: 700, color: '#4ecca3',
+          animation: 'float-up 0.8s ease-out forwards',
+          pointerEvents: 'none', zIndex: 10,
+        }}>+50XP +10🪙</span>
+      )}
       <div onClick={onToggle} style={{
         width: 18, height: 18, borderRadius: '50%',
         border: `2px solid ${task.completed ? 'var(--accent)' : 'var(--border)'}`,
