@@ -121,6 +121,17 @@ const defaultAchievements: Achievement[] = Object.values(ACHIEVEMENT_DEFS).map(d
   unlocked: false, progress: 0, total: d.total,
 }));
 
+// ====== 成就重算（状态类成就：streak / pet.level 等）======
+// toggleTask 与 stopStudyTimer 共用，保证学习会话结束后成就实时推进
+function computeStateAchievements(state: Store, streak: number): Achievement[] {
+  return state.achievements.map(ach => {
+    const def = ACHIEVEMENT_DEFS[ach.id];
+    if (!def || !def.onStateTick) return ach;
+    const progress = def.onStateTick({ state, streak });
+    return { ...ach, progress, unlocked: progress >= ach.total };
+  });
+}
+
 const defaultSchedule: ScheduleItem[] = scheduleData;
 
 const defaultLogs: ActivityLog[] = []; // 初始为空，由 tracker 填充
@@ -176,11 +187,12 @@ export const useStore = create<Store>()(
       timerAccumulatedSeconds: 0,
 
       toggleTask: (id) => set(state => {
-        const tasks = state.tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
-        const task = tasks.find(t => t.id === id);
-        
-        const updates: Partial<Store> = { tasks };
         const today = new Date().toISOString().slice(0, 10);
+        // 勾选完成时把任务日期记为完成日（跨天补打卡才算今天，保证 streak 正确）
+        const tasks = state.tasks.map(t => t.id === id ? { ...t, completed: !t.completed, date: !t.completed ? today : t.date } : t);
+        const task = tasks.find(t => t.id === id);
+
+        const updates: Partial<Store> = { tasks };
         
         if (task?.completed) {
           // 1. 宠物经验、金币、爱心
@@ -195,7 +207,8 @@ export const useStore = create<Store>()(
           if (pet.exp >= pet.expToNext) {
             pet.exp -= pet.expToNext;
             pet.level += 1;
-            pet.expToNext = Math.floor(pet.expToNext * 1.2);
+            // 线性经验曲线：Lv.50 累计约 6.6 万经验（每个任务 +50exp，约 1300 个任务）
+            pet.expToNext = 100 + pet.level * 50;
           }
           pet.mood = 'happy';
           updates.pet = pet;
@@ -254,14 +267,7 @@ export const useStore = create<Store>()(
         updates.streak = streak;
         
         // 6. 更新基于全局状态的成就（如 streak、level）
-        const baseAchievements = updates.achievements || state.achievements;
-        const finalAchievements = baseAchievements.map(ach => {
-          const def = ACHIEVEMENT_DEFS[ach.id];
-          if (!def || !def.onStateTick) return ach;
-          const progress = def.onStateTick({ state: { ...state, ...updates }, streak });
-          return { ...ach, progress, unlocked: progress >= ach.total };
-        });
-        updates.achievements = finalAchievements;
+        updates.achievements = computeStateAchievements({ ...state, ...updates }, streak);
         
         return updates;
       }),
@@ -424,7 +430,7 @@ export const useStore = create<Store>()(
         const totalMin = Math.round(elapsed / 60);
         const today = new Date().toISOString().slice(0, 10);
         const subject = state.activeTimerSubject;
-        set({
+        const next: Partial<Store> = {
           subjectProgress: {
             ...state.subjectProgress,
             [subject]: {
@@ -436,7 +442,10 @@ export const useStore = create<Store>()(
           activeTimerSubject: null,
           timerStartTime: null,
           timerAccumulatedSeconds: 0,
-        });
+        };
+        // 会话结束后重算成就（streak / pet.level 等状态类成就实时推进）
+        next.achievements = computeStateAchievements({ ...state, ...next }, state.streak);
+        set(next);
       },
     }),
     {

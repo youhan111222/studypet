@@ -15,7 +15,7 @@ export function TaskList() {
   const addTask = useStore(s => s.addTask);
   const addTaskOpen = useStore(s => s.addTaskOpen);
   const toggleAddTask = useStore(s => s.toggleAddTask);
-  const [newTask, setNewTask] = useState({ title: '', period: 'morning' as Period, time: '14:00-15:00', tags: '' });
+  const [newTask, setNewTask] = useState({ title: '', period: 'morning' as Period, time: '14:00-15:00', tags: '', duration: 60, deadline: '' });
 
   const periods: Period[] = ['morning', 'afternoon', 'evening'];
   const total = tasks.length;
@@ -25,11 +25,12 @@ export function TaskList() {
     if (!newTask.title.trim()) return;
     addTask({
       id: `manual-${Date.now()}`, title: newTask.title, period: newTask.period,
-      time: newTask.time, duration: 60,
+      time: newTask.time, duration: newTask.duration,
       tags: newTask.tags.split(',').map(t => t.trim()).filter(Boolean),
       completed: false, source: 'manual', pomodoroCount: 0,
+      ...(newTask.deadline ? { deadline: newTask.deadline } : {}),
     });
-    setNewTask({ title: '', period: 'morning', time: '14:00-15:00', tags: '' });
+    setNewTask({ title: '', period: 'morning', time: '14:00-15:00', tags: '', duration: 60, deadline: '' });
     toggleAddTask();
   };
 
@@ -53,10 +54,10 @@ export function TaskList() {
 
       {addTaskOpen && (
         <div className="p-[16px] rounded-[8px] mb-[16px] bg-[var(--bg-card)] border border-[var(--border)]">
-          <div className="text-[14px] font-semibold mb-[8px]">添加新任务 — 支持粘贴微信截图OCR解析</div>
+          <div className="text-[14px] font-semibold mb-[8px]">添加新任务</div>
           <div className="flex flex-col gap-[8px]">
             <input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })}
-              placeholder="任务标题（或粘贴微信作业截图路径）"
+              placeholder="任务标题（可粘贴微信作业文字）"
               className="p-[8px_12px] rounded-[6px] text-[13px] bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] outline-none" />
             <div className="flex gap-[8px]">
               <select value={newTask.period} onChange={e => setNewTask({ ...newTask, period: e.target.value as Period })}
@@ -66,6 +67,19 @@ export function TaskList() {
                 <option value="evening">晚上</option>
               </select>
               <input value={newTask.time} onChange={e => setNewTask({ ...newTask, time: e.target.value })} placeholder="时间"
+                className="flex-1 p-[8px_12px] rounded-[6px] bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] text-[13px] outline-none" />
+            </div>
+            <div className="flex gap-[8px]">
+              <select value={newTask.duration} onChange={e => setNewTask({ ...newTask, duration: Number(e.target.value) })}
+                className="flex-1 p-[8px_12px] rounded-[6px] bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] text-[13px] outline-none">
+                <option value={30}>30分钟</option>
+                <option value={60}>60分钟</option>
+                <option value={90}>90分钟</option>
+                <option value={120}>120分钟</option>
+                <option value={180}>180分钟</option>
+              </select>
+              <input value={newTask.deadline} onChange={e => setNewTask({ ...newTask, deadline: e.target.value })}
+                placeholder="截止（如：明天 / 3天后 / 2026-08-10）"
                 className="flex-1 p-[8px_12px] rounded-[6px] bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] text-[13px] outline-none" />
             </div>
             <input value={newTask.tags} onChange={e => setNewTask({ ...newTask, tags: e.target.value })}

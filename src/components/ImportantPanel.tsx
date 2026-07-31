@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import type { ImportantItem } from '../types';
 
@@ -11,12 +11,21 @@ export function ImportantPanel() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [priority, setPriority] = useState<'high' | 'normal'>('normal');
+  const [remindAt, setRemindAt] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  const firedRef = useRef<Set<string>>(new Set());
 
   const active = items.filter(i => !i.done);
   const done = items.filter(i => i.done);
 
   const handleAdd = () => {
     if (!title.trim()) return;
+    const remind = remindAt || undefined;
+    // 设置了提醒时间 → 请求浏览器通知权限（未授予时）
+    if (remind && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+      Notification.requestPermission();
+    }
     addImportant({
       id: `imp-${Date.now()}`,
       title: title.trim(),
@@ -24,9 +33,40 @@ export function ImportantPanel() {
       priority,
       createdAt: new Date().toISOString().slice(0, 10),
       done: false,
+      remindAt: remind,
     });
-    setTitle(''); setContent(''); setPriority('normal'); setShowAdd(false);
+    setTitle(''); setContent(''); setPriority('normal'); setRemindAt(''); setShowAdd(false);
   };
+
+  // 到点提醒：每 30s 检查未完成且有 remindAt 的事项（误差 1 分钟），通知 + 页内 toast 双通道
+  useEffect(() => {
+    const check = () => {
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const dateKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+      for (const item of items) {
+        if (item.done || !item.remindAt) continue;
+        const [h, m] = item.remindAt.split(':').map(Number);
+        if (Number.isNaN(h) || Number.isNaN(m)) continue;
+        if (Math.abs(nowMin - (h * 60 + m)) > 1) continue;
+        const key = `${item.id}@${dateKey}`;
+        if (firedRef.current.has(key)) continue;
+        firedRef.current.add(key);
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          try { new Notification('StudyPet 提醒', { body: item.title }); } catch { /* 通知被拦截时忽略 */ }
+        }
+        setToast(item.title);
+        if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = window.setTimeout(() => setToast(null), 6000);
+      }
+    };
+    check();
+    const id = window.setInterval(check, 30000);
+    return () => {
+      window.clearInterval(id);
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, [items]);
 
   return (
     <div style={{ padding: '20px 24px', height: '100%', overflowY: 'auto' }}>
@@ -61,6 +101,11 @@ export function ImportantPanel() {
             fontFamily: 'inherit', marginBottom: 8,
           }} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="time" value={remindAt} onChange={e => setRemindAt(e.target.value)} title="到点提醒时间（可选）" style={{
+              padding: '5px 10px', borderRadius: 6,
+              background: 'var(--bg-input)', border: '1px solid var(--border)',
+              color: 'var(--text-primary)', fontSize: 12, outline: 'none',
+            }} />
             <select value={priority} onChange={e => setPriority(e.target.value as 'high' | 'normal')} style={{
               padding: '5px 10px', borderRadius: 6,
               background: 'var(--bg-input)', border: '1px solid var(--border)',
@@ -143,6 +188,13 @@ export function ImportantPanel() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* 页内提醒 toast（通知不可用时兜底展示） */}
+      {toast && (
+        <div className="fixed bottom-[16px] right-[16px] z-[300] p-[10px_16px] rounded-[10px] text-[13px] shadow-[var(--shadow-pop)] bg-[var(--bg-card)] border border-[var(--border-strong)]">
+          ⏰ {toast}
         </div>
       )}
     </div>

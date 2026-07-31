@@ -196,6 +196,28 @@ export function SchedulePanel() {
     }
     return false;
   };
+  // 课表数据中实际出现的最大周次（解析 weeks 字符串，支持 "13" / "1-17" / "1,3,5" / "1-8,10,12-14"）
+  const maxWeek = useMemo(() => {
+    let max = 0;
+    for (const s of schedule) {
+      const parts = String(s.weeks || '').split(',');
+      for (const part of parts) {
+        const t = part.trim();
+        if (!t) continue;
+        if (t.includes('-')) {
+          const [, end] = t.split('-').map(Number);
+          if (!Number.isNaN(end) && end > max) max = end;
+        } else {
+          const n = Number(t);
+          if (!Number.isNaN(n) && n > max) max = n;
+        }
+      }
+    }
+    return max;
+  }, [schedule]);
+  // 当前周已超过课表数据范围 → 学期结束，回退为展示全部课程
+  const semesterOver = maxWeek > 0 && currentWeek > maxWeek;
+
   const monday = getMondayOfWeek(today);
   const weekDates: Date[] = [];
   for (let i = 0; i < 7; i++) {
@@ -226,6 +248,12 @@ export function SchedulePanel() {
         </div>
       </div>
 
+      {semesterOver && (
+        <div className="mb-[12px] p-[8px_12px] rounded-[6px] text-[12px] bg-[var(--bg-tertiary)] border border-[var(--accent)] text-[var(--text-primary)]">
+          学期已结束（第 {maxWeek} 周），展示全部课程供参考 —— 可导入新学期课表
+        </div>
+      )}
+
       {importMsg && (
         <div className="mb-[12px] p-[8px_12px] rounded-[6px] text-[12px] text-[var(--text-primary)]" style={{
           background: importMsg.includes('失败') ? 'rgba(255,69,58,0.1)' : 'rgba(78,204,163,0.1)',
@@ -239,7 +267,8 @@ export function SchedulePanel() {
         {[1, 2, 3, 4, 5, 6, 7].map(day => {
           const items = schedule.filter(s => {
             if (s.day !== day) return false;
-            if (!isWeekActive(s.weeks, currentWeek)) return false;
+            // 学期结束后回退：视为所有周都激活
+            if (!semesterOver && !isWeekActive(s.weeks, currentWeek)) return false;
             return true;
           });
           const dateObj = weekDates[day - 1];

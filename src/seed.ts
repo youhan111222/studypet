@@ -505,6 +505,62 @@ const seedQuestions: Question[] = [
     stem: '唯物辩证法认为事物发展的源泉和动力是？', options: ['内部矛盾', '外部矛盾', '外力推动', '量的积累'],
     answer: 'A', analysis: '内因（内部矛盾）是事物发展的源泉和根本动力，外因通过内因起作用。',
     difficulty: 'easy', tags: ['辩证法', '矛盾'], source: 'manual', createdAt: '2026-07-31' },
+
+  // ====== 多选 / 判断 / 填空 题型补充（电子技术） ======
+  { id: 'elec-m1', subject: 'electronics', chapter: '双极结型三极管(BJT)及其放大电路', type: 'multiple',
+    stem: '下列哪些电路组态具有电压放大能力？（多选）', options: ['共射', '共集', '共基', '共源'],
+    answer: 'AC', analysis: '共射和共基具有电压放大能力；共集（射随器）电压增益≈1，主要做阻抗变换。',
+    difficulty: 'medium', tags: ['BJT', '组态'], source: 'manual', createdAt: '2026-07-31' },
+  { id: 'elec-m2', subject: 'electronics', chapter: '集成运算放大器', type: 'multiple',
+    stem: '理想运放的主要特点包括？（多选）', options: ['开环增益无穷大', '输入电阻无穷大', '输出电阻为零', '带宽有限'],
+    answer: 'ABC', analysis: '理想运放：开环增益、输入电阻无穷大，输出电阻为零，带宽无穷大。',
+    difficulty: 'easy', tags: ['运放'], source: 'manual', createdAt: '2026-07-31' },
+  { id: 'elec-t1', subject: 'electronics', chapter: '半导体二极管', type: 'truefalse',
+    stem: '硅二极管正向导通时，管压降近似为0.7V。', answer: '对',
+    analysis: '硅管正向导通压降约0.6-0.7V，锗管约0.2-0.3V。',
+    difficulty: 'easy', tags: ['二极管'], source: 'manual', createdAt: '2026-07-31' },
+  { id: 'elec-t2', subject: 'electronics', chapter: '组合逻辑电路', type: 'truefalse',
+    stem: '异或门的输出在输入相同时为1。', answer: '错',
+    analysis: '异或门：输入相同时输出0，输入不同时输出1。',
+    difficulty: 'easy', tags: ['逻辑门'], source: 'manual', createdAt: '2026-07-31' },
+  { id: 'elec-f1', subject: 'electronics', chapter: '集成运算放大器', type: 'fill',
+    stem: '理想运放两输入端电位近似相等的现象称为____（两个字）。', answer: '虚短',
+    analysis: '虚短：负反馈深度足够时两输入端电位近似相等；虚断：输入电流近似为0。',
+    difficulty: 'easy', tags: ['运放'], source: 'manual', createdAt: '2026-07-31' },
+
+  // ====== 多选 / 判断 / 填空 题型补充（高数） ======
+  { id: 'math-m1', subject: 'math', chapter: '函数与极限', type: 'multiple',
+    stem: '下列极限值为1的有？（多选）', options: ['lim(x→0) sinx/x', 'lim(x→∞) (1+1/x)^x', 'lim(x→0) x·sin(1/x)', 'lim(x→0) (e^x-1)/x'],
+    answer: 'ABD', analysis: '第一个重要极限、e的定义、等价无穷小均为1；x·sin(1/x) 极限为0（无穷小乘有界量）。',
+    difficulty: 'medium', tags: ['极限'], source: 'manual', createdAt: '2026-07-31' },
+  { id: 'math-t1', subject: 'math', chapter: '导数与微分', type: 'truefalse',
+    stem: '可导必连续，连续不一定可导。', answer: '对',
+    analysis: '可导是连续的充分条件；如 |x| 在 x=0 处连续但不可导。',
+    difficulty: 'easy', tags: ['导数'], source: 'manual', createdAt: '2026-07-31' },
+  { id: 'math-f1', subject: 'math', chapter: '函数与极限', type: 'fill',
+    stem: 'lim(x→0) sin x / x = ____', answer: '1',
+    analysis: '第一个重要极限，结果为1。',
+    difficulty: 'easy', tags: ['极限'], source: 'manual', createdAt: '2026-07-31' },
+
+  // ====== 判断 / 填空 题型补充（英语） ======
+  { id: 'eng-t1', subject: 'english', chapter: '基本语法规则', type: 'truefalse',
+    stem: '一般现在时中，主语为第三人称单数时动词需加 -s 或 -es。', answer: '对',
+    analysis: '第三人称单数一般现在时：动词加 -s/-es，如 he goes。',
+    difficulty: 'easy', tags: ['时态'], source: 'manual', createdAt: '2026-07-31' },
+  { id: 'eng-f1', subject: 'english', chapter: '基本语法规则', type: 'fill',
+    stem: 'He ____ (go) to school every day. 请写出动词的正确形式。', answer: 'goes',
+    analysis: '第三人称单数一般现在时，go 加 -es 变 goes。',
+    difficulty: 'easy', tags: ['时态'], source: 'manual', createdAt: '2026-07-31' },
+
+  // ====== 判断 / 填空 题型补充（政治） ======
+  { id: 'pol-t1', subject: 'politics', chapter: '马克思主义哲学原理', type: 'truefalse',
+    stem: '实践是检验真理的唯一标准。', answer: '对',
+    analysis: '马克思主义认识论的基本观点：实践是检验真理的唯一标准。',
+    difficulty: 'easy', tags: ['认识论'], source: 'manual', createdAt: '2026-07-31' },
+  { id: 'pol-f1', subject: 'politics', chapter: '马克思主义哲学原理', type: 'fill',
+    stem: '事物发展的根本原因是____（填：内部矛盾/外部矛盾）。', answer: '内部矛盾',
+    analysis: '内因是事物发展的根本原因，外因通过内因起作用。',
+    difficulty: 'easy', tags: ['辩证法'], source: 'manual', createdAt: '2026-07-31' },
 ];
 
 async function seed() {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import type { ActivityLog, MasteryLevel, SubjectKey } from '../types';
 import { hexToRgb } from '../utils';
@@ -287,6 +287,15 @@ export function AnalyticsPanel() {
     ]);
   };
 
+  // 最专注时段：近14天数据中学习分钟数最多的小时（无真实数据时为 null，不展示该条建议）
+  const bestFocusHour = useMemo(() => {
+    let best: { hour: number; min: number } | null = null;
+    for (const ts of timeStats) {
+      if (ts.studyMinutes > (best ? best.min : 0)) best = { hour: ts.hour, min: ts.studyMinutes };
+    }
+    return best && best.min > 0 ? best : null;
+  }, [timeStats]);
+
   const getEfficiencyColor = (score: number) => {
     if (score >= 70) return '#4ecca3';
     if (score >= 40) return '#ffa726';
@@ -546,7 +555,9 @@ export function AnalyticsPanel() {
               {subjectStats.find(s => s.focusScore < 30) && (
                 <li>对 {subjectStats.filter(s => s.focusScore < 30).map(s => s.name).join('、')} 科目增加每日固定投入时间</li>
               )}
-              <li>根据课表，在空档期（如上午10-11点）安排需要深度专注的任务</li>
+              {bestFocusHour && (
+                <li>你通常在 {bestFocusHour.hour} 点最专注（近14天累计学习 {bestFocusHour.min} 分钟）</li>
+              )}
             </ul>
           </div>
         </div>

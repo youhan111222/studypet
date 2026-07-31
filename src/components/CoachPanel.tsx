@@ -43,9 +43,9 @@ export function CoachPanel() {
   const addStudyChecklist = useStore(s => s.addStudyChecklist);
   const addPracticeLog = useStore(s => s.addPracticeLog);
   const addExamRecord = useStore(s => s.addExamRecord);
+  const autoPlan = useStore(s => s.autoPlan);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [searchEnabled, setSearchEnabled] = useState(false);
   const [voiceOn, setVoiceOn] = useState(false);
   const [panelWidth, setPanelWidth] = useState(460);
   const [isFullWidth, setIsFullWidth] = useState(false);
@@ -830,6 +830,17 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
     setLoading(false);
   }, [loading, activeSessionDate, addMessage, voiceOn, speak]);
 
+  // ====== 自动规划：autoPlan 开启且今日空会话时，自动请求教练生成今日计划（每次打开面板触发一次） ======
+  const autoPlannedRef = useRef(false);
+  useEffect(() => {
+    if (!autoPlan) { autoPlannedRef.current = false; return; }
+    if (!isToday || !isEmpty || loading) return;
+    if (autoPlannedRef.current) return;
+    autoPlannedRef.current = true;
+    const t = setTimeout(() => { doSend('根据我今天课表和未完成任务，帮我规划今天的学习计划'); }, 400);
+    return () => clearTimeout(t);
+  }, [autoPlan, isToday, isEmpty, loading, doSend]);
+
   const handleSend = () => doSend(input);
 
   const handleOption = async (opt: string) => {
@@ -921,20 +932,6 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
           <span style={{ fontSize: 10, color: 'var(--accent)' }}>● DeepSeek R1</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {/* Web search toggle */}
-          <button
-            onClick={() => setSearchEnabled(!searchEnabled)}
-            title={searchEnabled ? '联网搜索已开启' : '联网搜索已关闭'}
-            style={{
-              padding: '2px 8px', borderRadius: 10, fontSize: 10,
-              background: searchEnabled ? 'rgba(10,132,255,0.2)' : 'transparent',
-              border: searchEnabled ? '1px solid #0a84ff' : '1px solid var(--border)',
-              color: searchEnabled ? '#0a84ff' : 'var(--text-muted)',
-              cursor: 'pointer',
-            }}
-          >
-            {searchEnabled ? '🌐 联网' : '🌐'}
-          </button>
           {/* Voice toggle */}
           <button
             onClick={() => setVoiceOn(!voiceOn)}
