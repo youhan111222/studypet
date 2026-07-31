@@ -205,51 +205,37 @@ export function SchedulePanel() {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px 24px', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+    <div className="flex-1 flex flex-col p-[20px_24px] overflow-hidden">
+      <div className="flex items-center justify-between mb-[16px]">
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>课程表</h2>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          <h2 className="text-[18px] font-semibold m-0">课程表</h2>
+          <span className="text-[11px] text-[var(--text-muted)]">
             {schedule.length > 6 ? '已从文件导入' : '当前课表为空 · 点击导入按钮添加课表'}
             {' · '}第 {currentWeek} 周 ({fmtDate(weekDates[0])} - {fmtDate(weekDates[6])})
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-[8px]">
           <input ref={fileRef} type="file" accept=".csv,.json,.ics" onChange={handleFile}
-            style={{ display: 'none' }} />
-          <button onClick={() => fileRef.current?.click()} disabled={importing} style={{
-            padding: '6px 14px', borderRadius: 6,
-            background: 'var(--accent)', color: '#000',
-            fontSize: 12, fontWeight: 500, opacity: importing ? 0.5 : 1,
-          }}>
+            className="hidden" />
+          <button onClick={() => fileRef.current?.click()} disabled={importing} className="p-[6px_14px] rounded-[6px] bg-[var(--accent)] text-[#000] text-[12px] font-medium" style={{ opacity: importing ? 0.5 : 1 }}>
             {importing ? '导入中...' : '导入课表 (CSV/JSON/ICS)'}
           </button>
           {schedule.length > 6 && (
-            <button onClick={clearSchedule} style={{
-              padding: '6px 14px', borderRadius: 6,
-              background: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
-              border: '1px solid var(--border)', fontSize: 12,
-            }}>重置</button>
+            <button onClick={clearSchedule} className="p-[6px_14px] rounded-[6px] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)] text-[12px]">重置</button>
           )}
         </div>
       </div>
 
       {importMsg && (
-        <div style={{
-          marginBottom: 12, padding: '8px 12px', borderRadius: 6,
+        <div className="mb-[12px] p-[8px_12px] rounded-[6px] text-[12px] text-[var(--text-primary)]" style={{
           background: importMsg.includes('失败') ? 'rgba(255,69,58,0.1)' : 'rgba(78,204,163,0.1)',
           border: `1px solid ${importMsg.includes('失败') ? 'rgba(255,69,58,0.3)' : 'rgba(78,204,163,0.3)'}`,
-          fontSize: 12, color: 'var(--text-primary)',
         }}>
           {importMsg}
         </div>
       )}
 
-      <div style={{
-        flex: 1, overflowY: 'auto',
-        display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)',
-        gap: 6, alignContent: 'start',
-      }}>
+      <div className="flex-1 overflow-y-auto grid grid-cols-[repeat(7,1fr)] gap-[6px] content-[start]">
         {[1, 2, 3, 4, 5, 6, 7].map(day => {
           const items = schedule.filter(s => {
             if (s.day !== day) return false;
@@ -260,41 +246,33 @@ export function SchedulePanel() {
           const dateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`;
           const isToday = dateStr === todayStr;
           return (
-            <div key={day} style={{
-              background: 'var(--bg-card)', borderRadius: 8,
+            <div key={day} className="bg-[var(--bg-card)] rounded-[8px] p-[8px] min-h-[180px]" style={{
               border: isToday ? '2px solid var(--accent)' : '1px solid var(--border)',
-              padding: 8, minHeight: 180, opacity: (day === 6 || day === 7) ? 0.85 : 1,
+              opacity: (day === 6 || day === 7) ? 0.85 : 1,
             }}>
-              <div style={{
-                fontSize: 12, fontWeight: 600, marginBottom: 6,
+              <div className="text-[12px] font-semibold mb-[6px] pb-[4px] border-b border-[var(--border)] flex justify-between items-baseline" style={{
                 color: isToday ? 'var(--accent)' : 'var(--text-primary)',
-                paddingBottom: 4, borderBottom: '1px solid var(--border)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
               }}>
                 <span>{dayNames[day]}</span>
-                <span style={{ fontSize: 10, color: isToday ? 'var(--accent)' : 'var(--text-muted)', fontWeight: 400 }}>
+                <span className="text-[10px] font-normal" style={{ color: isToday ? 'var(--accent)' : 'var(--text-muted)' }}>
                   {fmtDate(dateObj)}
                 </span>
               </div>
               {isToday && (
-                <div style={{ fontSize: 10, color: 'var(--accent)', marginBottom: 4, fontWeight: 600 }}>● 今天</div>
+                <div className="text-[10px] text-[var(--accent)] mb-[4px] font-semibold">● 今天</div>
               )}
               {items.length === 0 ? (
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }}>
+                <div className="text-[10px] text-[var(--text-muted)] text-center p-[16px_0]">
                   暂无课程
                 </div>
               ) : (
                 items.map(item => (
-                  <div key={item.id} style={{
-                    padding: '6px 8px', borderRadius: 6,
-                    background: 'var(--bg-secondary)', marginBottom: 4,
-                    border: '1px solid var(--border)',
-                  }}>
-                    <div style={{ fontSize: 11, fontWeight: 500 }}>{item.name}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 1 }}>
+                  <div key={item.id} className="p-[6px_8px] rounded-[6px] bg-[var(--bg-secondary)] mb-[4px] border border-[var(--border)]">
+                    <div className="text-[11px] font-medium">{item.name}</div>
+                    <div className="text-[10px] text-[var(--text-secondary)] mt-[1px]">
                       {item.timeStart}-{item.timeEnd}
                     </div>
-                    <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1 }}>
+                    <div className="text-[9px] text-[var(--text-muted)] mt-[1px]">
                       {item.location}{item.teacher ? ' · ' + item.teacher : ''}
                     </div>
                   </div>
@@ -305,12 +283,8 @@ export function SchedulePanel() {
         })}
       </div>
 
-      <div style={{
-        marginTop: 12, padding: '8px 12px', borderRadius: 6,
-        background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-        fontSize: 11, color: 'var(--text-secondary)',
-      }}>
-        CSV 格式示例：<code style={{ color: 'var(--accent)' }}>课程名称,星期,开始时间,结束时间,地点,教师,周次</code> · 也支持 .json 和标准 .ics (iCalendar) 格式
+      <div className="mt-[12px] p-[8px_12px] rounded-[6px] bg-[var(--bg-tertiary)] border border-[var(--border)] text-[11px] text-[var(--text-secondary)]">
+        CSV 格式示例：<code className="text-[var(--accent)]">课程名称,星期,开始时间,结束时间,地点,教师,周次</code> · 也支持 .json 和标准 .ics (iCalendar) 格式
       </div>
     </div>
   );

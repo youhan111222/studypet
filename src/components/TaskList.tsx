@@ -34,54 +34,48 @@ export function TaskList() {
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px 24px', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600 }}>今日任务</h2>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{done}/{total} 完成</span>
+    <div className="flex-1 flex flex-col p-[20px_24px] overflow-hidden">
+      <div className="flex items-center justify-between mb-[16px]">
+        <div className="flex items-center gap-[12px]">
+          <h2 className="text-[18px] font-semibold">今日任务</h2>
+          <span className="text-[12px] text-[var(--text-secondary)]">{done}/{total} 完成</span>
           {tasks.some(t => t.source === 'wechat') && (
-            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(10,132,255,0.15)', color: 'var(--blue)' }}>💬 含微信作业</span>
+            <span className="text-[10px] p-[2px_8px] rounded-[10px] bg-[rgba(10,132,255,0.15)] text-[var(--blue)]">💬 含微信作业</span>
           )}
           {tasks.some(t => t.source === 'schedule') && (
-            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(168,85,247,0.15)', color: 'var(--purple)' }}>📅 课表导入</span>
+            <span className="text-[10px] p-[2px_8px] rounded-[10px] bg-[rgba(168,85,247,0.15)] text-[var(--purple)]">📅 课表导入</span>
           )}
         </div>
-        <button onClick={toggleAddTask} style={{
-          padding: '6px 14px', borderRadius: 6,
-          background: 'var(--accent)', color: '#000', fontSize: 12, fontWeight: 500,
-        }}>
+        <button onClick={toggleAddTask} className="p-[6px_14px] rounded-[6px] bg-[var(--accent)] text-[#000] text-[12px] font-medium">
           + 添加任务
         </button>
       </div>
 
       {addTaskOpen && (
-        <div style={{
-          padding: 16, borderRadius: 8, marginBottom: 16,
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-        }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>添加新任务 — 支持粘贴微信截图OCR解析</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="p-[16px] rounded-[8px] mb-[16px] bg-[var(--bg-card)] border border-[var(--border)]">
+          <div className="text-[14px] font-semibold mb-[8px]">添加新任务 — 支持粘贴微信截图OCR解析</div>
+          <div className="flex flex-col gap-[8px]">
             <input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })}
               placeholder="任务标题（或粘贴微信作业截图路径）"
-              style={{ padding: '8px 12px', borderRadius: 6, fontSize: 13, background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)', outline: 'none' }} />
-            <div style={{ display: 'flex', gap: 8 }}>
+              className="p-[8px_12px] rounded-[6px] text-[13px] bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] outline-none" />
+            <div className="flex gap-[8px]">
               <select value={newTask.period} onChange={e => setNewTask({ ...newTask, period: e.target.value as Period })}
-                style={{ flex: 1, padding: '8px 12px', borderRadius: 6, background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }}>
+                className="flex-1 p-[8px_12px] rounded-[6px] bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] text-[13px] outline-none">
                 <option value="morning">上午</option>
                 <option value="afternoon">下午</option>
                 <option value="evening">晚上</option>
               </select>
               <input value={newTask.time} onChange={e => setNewTask({ ...newTask, time: e.target.value })} placeholder="时间"
-                style={{ flex: 1, padding: '8px 12px', borderRadius: 6, background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }} />
+                className="flex-1 p-[8px_12px] rounded-[6px] bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] text-[13px] outline-none" />
             </div>
             <input value={newTask.tags} onChange={e => setNewTask({ ...newTask, tags: e.target.value })}
               placeholder="标签（逗号分隔，如：DDL, 小组）"
-              style={{ padding: '8px 12px', borderRadius: 6, fontSize: 13, background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)', outline: 'none' }} />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={handleAdd} style={{ flex: 1, padding: '8px 12px', borderRadius: 6, background: 'var(--accent)', color: '#000', fontSize: 12, fontWeight: 500 }}>
+              className="p-[8px_12px] rounded-[6px] text-[13px] bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] outline-none" />
+            <div className="flex gap-[8px]">
+              <button onClick={handleAdd} className="flex-1 p-[8px_12px] rounded-[6px] bg-[var(--accent)] text-[#000] text-[12px] font-medium">
                 确认添加
               </button>
-              <button onClick={toggleAddTask} style={{ flex: 1, padding: '8px 12px', borderRadius: 6, background: 'var(--bg-input)', color: 'var(--text-secondary)', border: '1px solid var(--border)', fontSize: 12 }}>
+              <button onClick={toggleAddTask} className="flex-1 p-[8px_12px] rounded-[6px] bg-[var(--bg-input)] text-[var(--text-secondary)] border border-[var(--border)] text-[12px]">
                 取消
               </button>
             </div>
@@ -89,17 +83,17 @@ export function TaskList() {
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="flex-1 overflow-y-auto flex flex-col gap-[16px]">
         {periods.map(period => {
           const periodTasks = tasks.filter(t => t.period === period);
           if (periodTasks.length === 0) return null;
           const cfg = periodConfig[period];
           return (
             <div key={period}>
-              <div style={{ fontSize: 12, color: cfg.color, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div className="text-[12px] font-semibold mb-[8px] flex items-center gap-[6px]" style={{ color: cfg.color }}>
                 <span>{cfg.icon}</span>{cfg.label}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="flex flex-col gap-[6px]">
                 {periodTasks.map(task => (
                   <TaskCard key={task.id} task={task} onToggle={() => toggle(task.id)} onDelete={() => deleteTask(task.id)} />
                 ))}
@@ -156,131 +150,96 @@ function TaskCard({ task, onToggle, onDelete }: { task: Task; onToggle: () => vo
   if (isChoice && optA && optB) {
     const picked = task.completed && chosen;
     return (
-      <div style={{
-        display: 'flex', flexDirection: 'column', gap: 4,
-        padding: '10px 14px', borderRadius: 8,
+      <div className="flex flex-col gap-[4px] p-[10px_14px] rounded-[8px] transition-[all_0.2s_ease] relative overflow-hidden" style={{
         background: task.completed ? 'rgba(78,204,163,0.08)' : 'var(--bg-card)',
         border: `1px solid ${task.completed ? 'rgba(78,204,163,0.2)' : 'var(--border)'}`,
-        opacity: task.completed ? 0.6 : 1, transition: 'all 0.2s',
-        position: 'relative', overflow: 'hidden',
+        opacity: task.completed ? 0.6 : 1,
       }}>
         {/* 完成飘字动画 */}
         {floatAnim && (
-          <span style={{
-            position: 'absolute', right: 12, top: '50%',
-            fontSize: 13, fontWeight: 700, color: '#4ecca3',
-            animation: 'float-up 0.8s ease-out forwards',
-            pointerEvents: 'none', zIndex: 10,
-          }}>+50XP +10🪙</span>
+          <span className="absolute right-[12px] top-[50%] text-[13px] font-bold text-[#4ecca3] animate-[float-up_0.8s_ease-out_forwards] pointer-events-none z-[10]">+50XP +10🪙</span>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(168,85,247,0.15)', color: 'var(--purple)', fontWeight: 600 }}>二选一</span>
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>⏰ {task.time}</span>
+        <div className="flex items-center gap-[8px] mb-[6px]">
+          <span className="text-[10px] p-[2px_6px] rounded-[4px] bg-[rgba(168,85,247,0.15)] text-[var(--purple)] font-semibold">二选一</span>
+          <span className="text-[11px] text-[var(--text-secondary)]">⏰ {task.time}</span>
           {!task.completed && (
-            <button onClick={handleRandom} style={{
-              marginLeft: 'auto', padding: '2px 8px', fontSize: 11,
-              background: 'rgba(255,175,76,0.15)', color: '#ffaf4c',
-              border: '1px solid rgba(255,175,76,0.3)', borderRadius: 4, cursor: 'pointer',
-            }}>🎲 抽签</button>
+            <button onClick={handleRandom} className="ml-auto p-[2px_8px] text-[11px] bg-[rgba(255,175,76,0.15)] text-[#ffaf4c] border border-[rgba(255,175,76,0.3)] rounded-[4px] cursor-pointer">🎲 抽签</button>
           )}
         </div>
         {[['A', optA], ['B', optB]].map(([key, label]) => {
           const isPicked = picked === key;
           const otherPicked = picked && picked !== key;
           return (
-            <div key={key} onClick={() => !task.completed && handleChoice(key as 'A' | 'B')} style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '6px 10px', borderRadius: 6,
+            <div key={key} onClick={() => !task.completed && handleChoice(key as 'A' | 'B')} className="flex items-center gap-[8px] p-[6px_10px] rounded-[6px]" style={{
               background: isPicked ? 'rgba(78,204,163,0.12)' : 'var(--bg-input)',
               border: `1px solid ${isPicked ? 'rgba(78,204,163,0.3)' : 'var(--border)'}`,
               cursor: task.completed ? 'default' : 'pointer',
               opacity: otherPicked ? 0.35 : 1,
               textDecoration: otherPicked ? 'line-through' : 'none',
             }}>
-              <div style={{
-                width: 16, height: 16, borderRadius: '50%',
+              <div className="w-[16px] h-[16px] rounded-[50%] flex-shrink-0 flex items-center justify-center" style={{
                 border: `2px solid ${isPicked ? 'var(--accent)' : otherPicked ? 'var(--border)' : 'var(--text-muted)'}`,
                 background: isPicked ? 'var(--accent)' : 'transparent',
-                flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                {isPicked && <span style={{ color: '#fff', fontSize: 9 }}>✓</span>}
+                {isPicked && <span className="text-[#fff] text-[9px]">✓</span>}
               </div>
-              <span style={{
-                fontSize: 13, fontWeight: isPicked ? 600 : 400,
+              <span className="text-[13px]" style={{
+                fontWeight: isPicked ? 600 : 400,
                 color: isPicked ? 'var(--accent)' : otherPicked ? 'var(--text-muted)' : 'var(--text-primary)',
               }}>{label as string}</span>
-              {isPicked && <span style={{ fontSize: 10, color: 'var(--accent)', marginLeft: 'auto' }}>已选</span>}
+              {isPicked && <span className="text-[10px] text-[var(--accent)] ml-auto">已选</span>}
             </div>
           );
         })}
-        <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+        <div className="flex gap-[4px] mt-[2px]">
           {task.tags.map(tag => (
-            <span key={tag} style={{
-              fontSize: 10, padding: '2px 6px', borderRadius: 4,
+            <span key={tag} className="text-[10px] p-[2px_6px] rounded-[4px]" style={{
               background: tag === 'DDL' ? 'rgba(233,69,96,0.15)' : 'rgba(10,132,255,0.15)',
               color: tag === 'DDL' ? 'var(--red)' : 'var(--blue)',
             }}>{tag}</span>
           ))}
-          {task.deadline && <span style={{ fontSize: 10, color: 'var(--red-soft)' }}>{task.deadline}</span>}
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} style={{
-            marginLeft: 'auto', padding: '2px 6px', fontSize: 10,
-            background: 'rgba(233,69,96,0.1)', color: 'var(--red-soft)',
-            border: '1px solid rgba(233,69,96,0.2)', borderRadius: 4,
-          }}>删除</button>
+          {task.deadline && <span className="text-[10px] text-[var(--red-soft)]">{task.deadline}</span>}
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="ml-auto p-[2px_6px] text-[10px] bg-[rgba(233,69,96,0.1)] text-[var(--red-soft)] border border-[rgba(233,69,96,0.2)] rounded-[4px]">删除</button>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '10px 14px', borderRadius: 8,
+    <div className="flex items-center gap-[10px] p-[10px_14px] rounded-[8px] transition-[all_0.2s_ease] relative overflow-hidden" style={{
       background: task.completed ? 'rgba(78,204,163,0.08)' : 'var(--bg-card)',
       border: `1px solid ${task.completed ? 'rgba(78,204,163,0.2)' : 'var(--border)'}`,
-      opacity: task.completed ? 0.6 : 1, transition: 'all 0.2s',
-      position: 'relative', overflow: 'hidden',
+      opacity: task.completed ? 0.6 : 1,
     }}>
       {/* 完成飘字动画 */}
       {floatAnim && (
-        <span style={{
-          position: 'absolute', right: 12, top: '50%',
-          fontSize: 13, fontWeight: 700, color: '#4ecca3',
-          animation: 'float-up 0.8s ease-out forwards',
-          pointerEvents: 'none', zIndex: 10,
-        }}>+50XP +10🪙</span>
+        <span className="absolute right-[12px] top-[50%] text-[13px] font-bold text-[#4ecca3] animate-[float-up_0.8s_ease-out_forwards] pointer-events-none z-[10]">+50XP +10🪙</span>
       )}
-      <div onClick={onToggle} style={{
-        width: 18, height: 18, borderRadius: '50%',
+      <div onClick={onToggle} className="w-[18px] h-[18px] rounded-[50%] flex items-center justify-center flex-shrink-0 cursor-pointer" style={{
         border: `2px solid ${task.completed ? 'var(--accent)' : 'var(--border)'}`,
         background: task.completed ? 'var(--accent)' : 'transparent',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer',
       }}>
-        {task.completed && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
+        {task.completed && <span className="text-[#fff] text-[10px]">✓</span>}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, textDecoration: task.completed ? 'line-through' : 'none', color: task.completed ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium" style={{ textDecoration: task.completed ? 'line-through' : 'none', color: task.completed ? 'var(--text-muted)' : 'var(--text-primary)' }}>
           {task.title}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', gap: 8, marginTop: 2 }}>
+        <div className="text-[11px] text-[var(--text-secondary)] flex gap-[8px] mt-[2px]">
           <span>⏰ {task.time}</span>
           <span>{icons[task.source]} {labels[task.source]}</span>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+      <div className="flex gap-[4px] flex-shrink-0">
         {task.tags.map(tag => (
-          <span key={tag} style={{
-            fontSize: 10, padding: '2px 6px', borderRadius: 4,
+          <span key={tag} className="text-[10px] p-[2px_6px] rounded-[4px]" style={{
             background: tag === 'DDL' ? 'rgba(233,69,96,0.15)' : tag === '小组' ? 'rgba(168,85,247,0.15)' : tag === '运动' ? 'rgba(78,204,163,0.15)' : 'rgba(10,132,255,0.15)',
             color: tag === 'DDL' ? 'var(--red)' : tag === '小组' ? 'var(--purple)' : tag === '运动' ? 'var(--accent)' : 'var(--blue)',
           }}>{tag}</span>
         ))}
       </div>
-      {task.deadline && <span style={{ fontSize: 10, color: 'var(--red-soft)', flexShrink: 0 }}>{task.deadline}</span>}
-      <button onClick={(e) => { e.stopPropagation(); onDelete(); }} style={{
-        padding: '2px 6px', fontSize: 10, background: 'rgba(233,69,96,0.1)', color: 'var(--red-soft)',
-        border: '1px solid rgba(233,69,96,0.2)', borderRadius: 4,
-      }}>删除</button>
+      {task.deadline && <span className="text-[10px] text-[var(--red-soft)] flex-shrink-0">{task.deadline}</span>}
+      <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-[2px_6px] text-[10px] bg-[rgba(233,69,96,0.1)] text-[var(--red-soft)] border border-[rgba(233,69,96,0.2)] rounded-[4px]">删除</button>
     </div>
   );
 }

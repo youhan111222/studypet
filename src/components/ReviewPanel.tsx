@@ -20,13 +20,12 @@ export function ReviewPanel() {
 
   if (reviewCards.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>
+      <div className="flex-1 flex items-center justify-center text-[var(--text-muted)]">
         <div className="text-center">
           <div className="text-5xl mb-4">🎉</div>
-          <div className="text-base font-bold mb-2" style={{ color: 'var(--text-primary)' }}>没有待复习的题目</div>
+          <div className="text-base font-bold mb-2 text-[var(--text-primary)]">没有待复习的题目</div>
           <div className="text-sm mb-4">所有错题都在按计划复习中</div>
-          <button onClick={() => navigate('/')} className="px-4 py-2 rounded-lg text-sm"
-            style={{ background: 'var(--accent)', color: '#fff' }}>返回首页</button>
+          <button onClick={() => navigate('/')} className="px-4 py-2 rounded-lg text-sm bg-[var(--accent)] text-[#fff]">返回首页</button>
         </div>
       </div>
     );
@@ -40,42 +39,39 @@ export function ReviewPanel() {
     <div className="flex-1 flex flex-col p-6 overflow-auto">
       {/* 顶部 */}
       <div className="flex items-center justify-between mb-6">
-        <button onClick={() => navigate('/')} className="text-sm" style={{ color: 'var(--text-muted)' }}>
+        <button onClick={() => navigate('/')} className="text-sm text-[var(--text-muted)]">
           ← 返回
         </button>
         <div className="flex items-center gap-2">
-          <span className="text-xs px-3 py-1 rounded-full" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
+          <span className="text-xs px-3 py-1 rounded-full bg-[var(--bg-card)] text-[var(--text-secondary)]">
             {reviewIndex + 1} / {reviewCards.length}
           </span>
-          <span className="text-xs px-2 py-1 rounded" style={{
-            background: card.state === 'Review' ? 'rgba(46,204,113,0.15)' : 'rgba(243,156,18,0.15)',
-            color: card.state === 'Review' ? '#2ecc71' : '#f39c12',
-          }}>{card.state === 'Review' ? '复习中' : card.state}</span>
+          <span className={`text-xs px-2 py-1 rounded ${card.state === 'Review' ? 'bg-[rgba(46,204,113,0.15)] text-[#2ecc71]' : 'bg-[rgba(243,156,18,0.15)] text-[#f39c12]'}`}>{card.state === 'Review' ? '复习中' : card.state}</span>
         </div>
       </div>
 
       {/* 题目 */}
-      <div className="rounded-2xl p-6 mb-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <div className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+      <div className="rounded-2xl p-6 mb-4 bg-[var(--bg-card)] border border-[var(--border)]">
+        <div className="text-xs mb-3 text-[var(--text-muted)]">
           {q.subject === 'electronics' ? '电子技术' : q.subject === 'math' ? '高数' : q.subject === 'english' ? '英语' : '政治'} · {q.chapter}
         </div>
-        <div className="text-base leading-relaxed mb-4" style={{ color: 'var(--text-primary)' }}>
+        <div className="text-base leading-relaxed mb-4 text-[var(--text-primary)]">
           {q.stem}
         </div>
 
         {!showAnswer ? (
           <div className="text-center py-8">
-            <div className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>在脑中回忆答案...</div>
+            <div className="text-sm mb-4 text-[var(--text-muted)]">在脑中回忆答案...</div>
             <button onClick={() => setShowAnswer(true)}
-              className="px-6 py-2 rounded-lg text-sm" style={{ background: 'var(--accent)', color: '#fff' }}>
+              className="px-6 py-2 rounded-lg text-sm bg-[var(--accent)] text-[#fff]">
               显示答案
             </button>
           </div>
         ) : (
-          <div className="p-4 rounded-lg" style={{ background: 'rgba(46,204,113,0.08)', border: '1px solid rgba(46,204,113,0.2)' }}>
-            <div className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>正确答案</div>
-            <div className="text-base font-bold mb-2" style={{ color: '#2ecc71' }}>{q.answer}</div>
-            {q.analysis && <div className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>💡 {q.analysis}</div>}
+          <div className="p-4 rounded-lg bg-[rgba(46,204,113,0.08)] border border-[rgba(46,204,113,0.2)]">
+            <div className="text-xs mb-1 text-[var(--text-muted)]">正确答案</div>
+            <div className="text-base font-bold mb-2 text-[#2ecc71]">{q.answer}</div>
+            {q.analysis && <div className="text-xs leading-relaxed text-[var(--text-secondary)]">💡 {q.analysis}</div>}
           </div>
         )}
       </div>
@@ -83,14 +79,13 @@ export function ReviewPanel() {
       {/* 评分 */}
       {showAnswer && !rated && (
         <div className="space-y-3 mb-4">
-          <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>你的记忆程度：</div>
+          <div className="text-sm text-[var(--text-secondary)]">你的记忆程度：</div>
           {([Rating.Again, Rating.Hard, Rating.Good, Rating.Easy] as const).map(rating => (
             <button key={rating} onClick={async () => { await submitReviewRating(rating as Grade); setRated(true); }}
-              className="w-full p-3 rounded-lg text-left flex items-center justify-between transition-all"
-              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+              className="w-full p-3 rounded-lg text-left flex items-center justify-between transition-all bg-[var(--bg-card)] border border-[var(--border)]">
               <div>
                 <div className="text-sm font-bold" style={{ color: RATING_LABELS[rating].color }}>{RATING_LABELS[rating].label}</div>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{RATING_LABELS[rating].desc}</div>
+                <div className="text-xs text-[var(--text-muted)]">{RATING_LABELS[rating].desc}</div>
               </div>
             </button>
           ))}
@@ -107,8 +102,7 @@ export function ReviewPanel() {
             nextReviewQuestion();
           }
         }}
-          className="px-8 py-3 rounded-xl text-sm font-bold mx-auto"
-          style={{ background: 'var(--accent)', color: '#fff' }}>
+          className="px-8 py-3 rounded-xl text-sm font-bold mx-auto bg-[var(--accent)] text-[#fff]">
           下一题 →
         </button>
       )}

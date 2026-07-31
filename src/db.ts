@@ -9,6 +9,11 @@ export class StudyPetDB extends Dexie {
   constructor() {
     super('StudyPetQuiz');
     this.version(1).stores({
+      questions: 'id, subject, chapter, type, difficulty, tags',
+      attempts: 'id, questionId, date, isCorrect',
+      reviewCards: 'id, questionId, due, subject, state',
+    });
+    this.version(2).stores({
       questions: 'id, subject, chapter, type, difficulty, tags, [subject+chapter]',
       attempts: 'id, questionId, date, isCorrect',
       reviewCards: 'id, questionId, due, subject, state',

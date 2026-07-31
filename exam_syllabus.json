@@ -38,7 +38,7 @@
         "单选题": {"count": 20, "perScore": 3, "total": 60},
         "填空题": {"count": 10, "perScore": 4, "total": 40},
         "判断题": {"count": 10, "perScore": 2, "total": 20},
-        "计算题": {"count": 5, "perScore": "16avg", "total": 80}
+        "计算题": {"count": 5, "perScore": 16, "total": 80}
       }
     },
     "math": {
@@ -65,6 +65,11 @@
           "曲线积分与曲面积分",
           "无穷级数"
         ]
+      },
+      "examStructure": {
+        "单选题": {"count": 20, "perScore": 2, "total": 40},
+        "填空题": {"count": 10, "perScore": 3, "total": 30},
+        "计算题": {"count": 6, "perScore": 5, "total": 30}
       }
     },
     "politics": {

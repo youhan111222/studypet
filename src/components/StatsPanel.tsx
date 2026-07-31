@@ -32,13 +32,12 @@ export function StatsPanel() {
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>
+      <div className="flex-1 flex items-center justify-center text-[var(--text-muted)]">
         <div className="text-center">
           <div className="text-4xl mb-4">⚠️</div>
           <div className="text-sm mb-2">加载统计数据失败</div>
-          <div className="text-xs mb-4" style={{ color: '#e74c3c' }}>{error}</div>
-          <button onClick={() => { setError(null); window.location.reload(); }} className="px-4 py-2 rounded-lg text-sm"
-            style={{ background: 'var(--accent)', color: '#fff' }}>重试</button>
+          <div className="text-xs mb-4 text-[#e74c3c]">{error}</div>
+          <button onClick={() => { setError(null); window.location.reload(); }} className="px-4 py-2 rounded-lg text-sm bg-[var(--accent)] text-[#fff]">重试</button>
         </div>
       </div>
     );
@@ -57,16 +56,16 @@ export function StatsPanel() {
           { label: '总答题量', value: totalAttempts, unit: '次', color: '#4ecca3' },
           { label: '总正确率', value: `${overallRate}`, unit: '%', color: overallRate > 70 ? '#2ecc71' : '#f39c12' },
         ].map(s => (
-          <div key={s.label} className="rounded-xl p-4 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+          <div key={s.label} className="rounded-xl p-4 text-center bg-[var(--bg-card)] border border-[var(--border)]">
             <div className="text-2xl font-bold" style={{ color: s.color }}>{s.value}<span className="text-sm">{s.unit}</span></div>
-            <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{s.label}</div>
+            <div className="text-xs mt-1 text-[var(--text-muted)]">{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* 各科正确率 */}
-      <div className="rounded-xl p-5 mb-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <h3 className="text-sm font-bold mb-4" style={{ color: 'var(--text-primary)' }}>各科正确率</h3>
+      <div className="rounded-xl p-5 mb-4 bg-[var(--bg-card)] border border-[var(--border)]">
+        <h3 className="text-sm font-bold mb-4 text-[var(--text-primary)]">各科正确率</h3>
         <div className="space-y-4">
           {SUBJECTS.map(s => {
             const data = stats[s.key];
@@ -74,13 +73,13 @@ export function StatsPanel() {
             return (
               <div key={s.key}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{s.name}</span>
+                  <span className="text-sm text-[var(--text-secondary)]">{s.name}</span>
                   <span className="text-sm font-bold" style={{ color: s.color }}>{rate}%</span>
                 </div>
-                <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-tertiary)' }}>
+                <div className="h-2 rounded-full overflow-hidden bg-[var(--bg-tertiary)]">
                   <div className="h-full rounded-full transition-all" style={{ width: `${rate}%`, background: s.color }} />
                 </div>
-                <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                <div className="text-xs mt-1 text-[var(--text-muted)]">
                   {data?.total || 0} 次答题 · {data?.correct || 0} 次正确
                 </div>
               </div>
@@ -94,13 +93,13 @@ export function StatsPanel() {
         const data = stats[s.key];
         if (!data || Object.keys(data.byChapter).length === 0) return null;
         return (
-          <div key={s.key} className="rounded-xl p-5 mb-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+          <div key={s.key} className="rounded-xl p-5 mb-4 bg-[var(--bg-card)] border border-[var(--border)]">
             <h4 className="text-sm font-bold mb-3" style={{ color: s.color }}>{s.name} · 章节详情</h4>
             <div className="space-y-2">
               {Object.entries(data.byChapter).map(([ch, d]: [string, any]) => (
                 <div key={ch} className="flex items-center justify-between text-xs">
-                  <span style={{ color: 'var(--text-secondary)' }}>{ch}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>
+                  <span className="text-[var(--text-secondary)]">{ch}</span>
+                  <span className="text-[var(--text-muted)]">
                     {d.correct}/{d.total} · {d.total > 0 ? Math.round(d.correct / d.total * 100) : 0}%
                   </span>
                 </div>

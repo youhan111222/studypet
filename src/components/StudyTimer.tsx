@@ -125,23 +125,14 @@ export function StudyTimer() {
   const isAnyTimerActive = activeSubject !== null;
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px',
-      background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)',
-      overflowX: 'auto', position: 'relative',
-    }}>
-      <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', fontWeight: 600 }}>
+    <div className="flex items-center gap-[10px] p-[8px_16px] bg-[var(--bg-secondary)] border-b border-[var(--border)] overflow-x-auto relative">
+      <span className="text-[12px] text-[var(--text-muted)] whitespace-nowrap font-semibold">
         学习计时
       </span>
 
       {/* 快速启动按钮（无活跃计时器时显示） */}
       {!isAnyTimerActive && (
-        <button onClick={handleQuickStart} style={{
-          padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600,
-          background: 'linear-gradient(135deg, #4ecca3, #0a84ff)',
-          color: '#fff', border: 'none', cursor: 'pointer',
-          whiteSpace: 'nowrap', animation: 'pulse-glow 2s infinite',
-        }}>
+        <button onClick={handleQuickStart} className="p-[6px_16px] rounded-[20px] text-[13px] font-semibold bg-[linear-gradient(135deg,_#4ecca3,_#0a84ff)] text-[#fff] border-none cursor-pointer whitespace-nowrap animate-[pulse-glow_2s_infinite]">
           🎯 先学 5 分钟
         </button>
       )}
@@ -153,69 +144,52 @@ export function StudyTimer() {
         const totalMin = subjectProgress[subj].totalMinutes;
 
         return (
-          <div key={subj} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '4px 10px', borderRadius: 14,
-            background: isActive ? `${meta.color}20` : 'var(--bg-card)',
-            border: isActive ? `1px solid ${meta.color}` : '1px solid var(--border)',
-            cursor: 'pointer', userSelect: 'none',
-            transition: 'all 0.15s',
-          }}>
+          <div key={subj} className="flex items-center gap-[6px] p-[4px_10px] rounded-[14px] cursor-pointer select-none transition-[all_0.15s]"
+            style={{
+              background: isActive ? `${meta.color}20` : 'var(--bg-card)',
+              border: isActive ? `1px solid ${meta.color}` : '1px solid var(--border)',
+            }}>
             {isActive ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{
-                  width: 6, height: 6, borderRadius: '50%',
-                  background: isPaused ? 'var(--text-muted)' : '#22c55e',
-                  animation: isPaused ? 'none' : 'pulse 1.5s infinite',
-                }} />
-                <span style={{ fontSize: 13, fontWeight: 600, color: meta.color, fontVariantNumeric: 'tabular-nums' }}>
+              <div className="flex items-center gap-[4px]">
+                <span className="w-[6px] h-[6px] rounded-[50%]"
+                  style={{
+                    background: isPaused ? 'var(--text-muted)' : '#22c55e',
+                    animation: isPaused ? 'none' : 'pulse 1.5s infinite',
+                  }} />
+                <span className="text-[13px] font-semibold tabular-nums" style={{ color: meta.color }}>
                   {liveDisplay}
                 </span>
                 {pomodoroMode && isActive && (
-                  <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  <span className="text-[10px] text-[var(--text-muted)]">
                     {pomodoroPhase === 'work' ? '🍅' : '☕'}
                   </span>
                 )}
               </div>
             ) : (
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              <span className="text-[12px] text-[var(--text-secondary)]">
                 {meta.icon} {meta.label}
               </span>
             )}
 
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            <span className="text-[11px] text-[var(--text-muted)]">
               {totalMin >= 60 ? `${(totalMin / 60).toFixed(1)}h` : `${totalMin}min`}
             </span>
 
-            <div style={{ display: 'flex', gap: 2 }}>
+            <div className="flex gap-[2px]">
               {!isActive && (
-                <button onClick={(e) => { e.stopPropagation(); startTimer(subj); setShowQuickStart(false); }} style={{
-                  fontSize: 11, padding: '2px 8px', borderRadius: 10,
-                  border: 'none', background: meta.color, color: '#fff', cursor: 'pointer',
-                }}>开始</button>
+                <button onClick={(e) => { e.stopPropagation(); startTimer(subj); setShowQuickStart(false); }} className="text-[11px] p-[2px_8px] rounded-[10px] border-none text-[#fff] cursor-pointer"
+                  style={{ background: meta.color }}>开始</button>
               )}
               {isActive && !isPaused && (
                 <>
-                  <button onClick={(e) => { e.stopPropagation(); pauseTimer(); }} style={{
-                    fontSize: 11, padding: '2px 8px', borderRadius: 10,
-                    border: 'none', background: 'var(--border)', color: 'var(--text-primary)', cursor: 'pointer',
-                  }}>暂停</button>
-                  <button onClick={(e) => { e.stopPropagation(); stopTimer(); }} style={{
-                    fontSize: 11, padding: '2px 8px', borderRadius: 10,
-                    border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer',
-                  }}>结束</button>
+                  <button onClick={(e) => { e.stopPropagation(); pauseTimer(); }} className="text-[11px] p-[2px_8px] rounded-[10px] border-none bg-[var(--border)] text-[var(--text-primary)] cursor-pointer">暂停</button>
+                  <button onClick={(e) => { e.stopPropagation(); stopTimer(); }} className="text-[11px] p-[2px_8px] rounded-[10px] border-none bg-[#ef4444] text-[#fff] cursor-pointer">结束</button>
                 </>
               )}
               {isActive && isPaused && (
                 <>
-                  <button onClick={(e) => { e.stopPropagation(); startTimer(subj); }} style={{
-                    fontSize: 11, padding: '2px 8px', borderRadius: 10,
-                    border: 'none', background: '#22c55e', color: '#fff', cursor: 'pointer',
-                  }}>继续</button>
-                  <button onClick={(e) => { e.stopPropagation(); stopTimer(); }} style={{
-                    fontSize: 11, padding: '2px 8px', borderRadius: 10,
-                    border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer',
-                  }}>结束</button>
+                  <button onClick={(e) => { e.stopPropagation(); startTimer(subj); }} className="text-[11px] p-[2px_8px] rounded-[10px] border-none bg-[#22c55e] text-[#fff] cursor-pointer">继续</button>
+                  <button onClick={(e) => { e.stopPropagation(); stopTimer(); }} className="text-[11px] p-[2px_8px] rounded-[10px] border-none bg-[#ef4444] text-[#fff] cursor-pointer">结束</button>
                 </>
               )}
             </div>
@@ -224,37 +198,23 @@ export function StudyTimer() {
       })}
 
       {/* 番茄钟切换 */}
-      <button onClick={() => { setPomodoroMode(!pomodoroMode); setPomodoroPhase('work'); }} style={{
-        fontSize: 11, padding: '3px 10px', borderRadius: 10, whiteSpace: 'nowrap',
-        background: pomodoroMode ? 'rgba(78,204,163,0.15)' : 'transparent',
-        border: pomodoroMode ? '1px solid #4ecca3' : '1px solid var(--border)',
-        color: pomodoroMode ? '#4ecca3' : 'var(--text-muted)',
-        cursor: 'pointer',
-      }}>
+      <button onClick={() => { setPomodoroMode(!pomodoroMode); setPomodoroPhase('work'); }} className="text-[11px] p-[3px_10px] rounded-[10px] whitespace-nowrap cursor-pointer"
+        style={{
+          background: pomodoroMode ? 'rgba(78,204,163,0.15)' : 'transparent',
+          border: pomodoroMode ? '1px solid #4ecca3' : '1px solid var(--border)',
+          color: pomodoroMode ? '#4ecca3' : 'var(--text-muted)',
+        }}>
         🍅 {pomodoroMode ? `${pomodoroCompleted}个` : '番茄'}
       </button>
 
       {/* Toast 提示 */}
       {quickStartToast && (
-        <div style={{
-          position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
-          marginTop: 8, padding: '8px 16px', borderRadius: 12,
-          background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.3)', zIndex: 200,
-          display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
-          whiteSpace: 'nowrap',
-        }}>
+        <div className="absolute top-[100%] left-[50%] -translate-x-[50%] mt-[8px] p-[8px_16px] rounded-[12px] bg-[var(--bg-tertiary)] border border-[var(--border)] shadow-[0_4px_16px_rgba(0,0,0,0.3)] z-[200] flex items-center gap-[8px] text-[12px] whitespace-nowrap">
           <span>{quickStartToast}</span>
           {quickStartToast.includes('5 分钟') && (
             <>
-              <button onClick={handleContinue25} style={{
-                padding: '4px 12px', borderRadius: 8, fontSize: 11,
-                background: 'var(--accent)', color: '#000', border: 'none', cursor: 'pointer',
-              }}>继续 25 分钟</button>
-              <button onClick={() => setQuickStartToast(null)} style={{
-                padding: '4px 8px', borderRadius: 8, fontSize: 11,
-                background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'pointer',
-              }}>不了</button>
+              <button onClick={handleContinue25} className="p-[4px_12px] rounded-[8px] text-[11px] bg-[var(--accent)] text-[#000] border-none cursor-pointer">继续 25 分钟</button>
+              <button onClick={() => setQuickStartToast(null)} className="p-[4px_8px] rounded-[8px] text-[11px] bg-transparent text-[var(--text-muted)] border border-[var(--border)] cursor-pointer">不了</button>
             </>
           )}
         </div>

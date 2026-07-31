@@ -47,74 +47,51 @@ export function Sidebar() {
   const isActive = (path: string) => currentPath === path || (path !== '/' && currentPath.startsWith(path));
 
   return (
-    <div style={{
-      width: 160, minWidth: 160, height: '100vh',
-      background: 'var(--bg-tertiary)', borderRight: '1px solid var(--border)',
-      display: 'flex', flexDirection: 'column', padding: '16px 12px', gap: 12,
-      overflow: 'hidden',
-    }}>
+    <div className="w-[160px] min-w-[160px] h-screen bg-[var(--bg-tertiary)] border-r border-[var(--border)] flex flex-col p-[16px_12px] gap-[12px] overflow-hidden">
       {/* Logo + 状态 */}
-      <div style={{ textAlign: 'center' }}>
-        <div style={{
-          width: 56, height: 56, margin: '0 auto', borderRadius: '50%',
-          background: 'linear-gradient(135deg, #4ecca3, #0a84ff)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 28,
-        }}>📚</div>
-        <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6 }}>StudyPet</div>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+      <div className="text-center">
+        <div className="w-[56px] h-[56px] mx-auto rounded-[50%] bg-[linear-gradient(135deg,_#4ecca3,_#0a84ff)] flex items-center justify-center text-[28px]">📚</div>
+        <div className="text-[14px] font-bold mt-[6px]">StudyPet</div>
+        <div className="text-[11px] text-[var(--text-secondary)] mt-[2px]">
           专升本备考助手
         </div>
 
         {nudge && (
-          <div style={{
-            marginTop: 8, padding: '6px 8px', borderRadius: 8,
-            background: 'rgba(78,204,163,0.1)', border: '1px solid rgba(78,204,163,0.2)',
-            fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.4,
-            textAlign: 'center',
-          }}>
+          <div className="mt-[8px] p-[6px_8px] rounded-[8px] bg-[rgba(78,204,163,0.1)] border border-[rgba(78,204,163,0.2)] text-[10px] text-[var(--text-secondary)] leading-[1.4] text-center">
             💬 {nudge}
           </div>
         )}
       </div>
 
       {/* 关键指标 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="flex flex-col gap-[6px]">
         {[
           { icon: '🔥', label: '连续', value: `${streak}天`, color: '#ff8c00' },
           { icon: '⏱️', label: '今日', value: `${Math.floor(todayStudyMin/60)}h${todayStudyMin%60}m`, color: '#4ecca3' },
           { icon: '📝', label: '待复习', value: `${dueCount}题`, color: dueCount > 0 ? '#e74c3c' : '#2ecc71' },
         ].map(item => (
-          <div key={item.label} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '6px 8px', borderRadius: 6, background: 'var(--bg-card)',
-          }}>
-            <span style={{ fontSize: 14 }}>{item.icon}</span>
+          <div key={item.label} className="flex items-center gap-[8px] p-[6px_8px] rounded-[6px] bg-[var(--bg-card)]">
+            <span className="text-[14px]">{item.icon}</span>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{item.label}</div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: item.color }}>{item.value}</div>
+              <div className="text-[10px] text-[var(--text-muted)]">{item.label}</div>
+              <div className="text-[12px] font-semibold" style={{ color: item.color }}>{item.value}</div>
             </div>
           </div>
         ))}
       </div>
 
       {/* 导航 */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col gap-[4px]">
           {navItems.map(v => (
-            <button key={v.id} onClick={() => navigate(v.path)} style={{
-              padding: '7px 12px', borderRadius: 6, textAlign: 'left',
-              fontSize: 12, fontWeight: 500, cursor: 'pointer',
+            <button key={v.id} onClick={() => navigate(v.path)} className="p-[7px_12px] rounded-[6px] text-left text-[12px] font-medium cursor-pointer" style={{
               background: isActive(v.path) ? 'var(--bg-card)' : 'transparent',
               color: isActive(v.path) ? 'var(--accent)' : 'var(--text-secondary)',
               border: isActive(v.path) ? '1px solid var(--accent)' : '1px solid transparent',
             }}>
               {v.icon} {v.label}
               {v.id === 'review' && dueCount > 0 && (
-                <span style={{
-                  marginLeft: 4, padding: '0 6px', borderRadius: 10,
-                  background: '#e74c3c', color: '#fff', fontSize: 10, fontWeight: 700,
-                }}>{dueCount}</span>
+                <span className="ml-[4px] p-[0_6px] rounded-[10px] bg-[#e74c3c] text-[#fff] text-[10px] font-bold">{dueCount}</span>
               )}
             </button>
           ))}
@@ -122,16 +99,13 @@ export function Sidebar() {
       </div>
 
       {/* 底部 */}
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>🤖 自动规划</span>
-          <button onClick={toggleAutoPlan} style={{
-            width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer',
-            background: autoPlan ? 'var(--accent)' : 'var(--border)', position: 'relative',
+      <div className="border-t border-[var(--border)] pt-[8px] flex flex-col gap-[6px]">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-[var(--text-secondary)]">🤖 自动规划</span>
+          <button onClick={toggleAutoPlan} className="w-[36px] h-[20px] rounded-[10px] border-none cursor-pointer relative" style={{
+            background: autoPlan ? 'var(--accent)' : 'var(--border)',
           }}>
-            <div style={{
-              width: 16, height: 16, borderRadius: '50%', background: '#fff',
-              position: 'absolute', top: 2,
+            <div className="w-[16px] h-[16px] rounded-[50%] bg-[#fff] absolute top-[2px]" style={{
               left: autoPlan ? 18 : 2, transition: 'left 0.2s',
             }} />
           </button>
