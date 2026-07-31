@@ -215,10 +215,18 @@ export function SchedulePanel() {
     }
     return max;
   }, [schedule]);
-  // 当前周已超过课表数据范围 → 学期结束，回退为展示全部课程
+  // 显示周：0 = 自动（当前周，夹在课表范围内）；用户可浏览任意周
+  const [displayWeek, setDisplayWeek] = useState(0);
+  const effectiveWeek = displayWeek > 0
+    ? Math.min(displayWeek, maxWeek || displayWeek)
+    : Math.min(Math.max(currentWeek, 1), maxWeek || Math.max(currentWeek, 1));
   const semesterOver = maxWeek > 0 && currentWeek > maxWeek;
 
-  const monday = getMondayOfWeek(today);
+  // 以学期第一周的周一为锚点，计算所显示周的日期
+  const [sy, sm, sd] = SEMESTER_START.split('-').map(Number);
+  const week1Monday = getMondayOfWeek(new Date(sy, sm - 1, sd));
+  const monday = new Date(week1Monday);
+  monday.setDate(week1Monday.getDate() + (effectiveWeek - 1) * 7);
   const weekDates: Date[] = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
@@ -233,7 +241,7 @@ export function SchedulePanel() {
           <h2 className="text-[18px] font-semibold m-0">课程表</h2>
           <span className="text-[11px] text-[var(--text-muted)]">
             {schedule.length > 6 ? '已从文件导入' : '当前课表为空 · 点击导入按钮添加课表'}
-            {' · '}第 {currentWeek} 周 ({fmtDate(weekDates[0])} - {fmtDate(weekDates[6])})
+            {' · '}第 {effectiveWeek} 周 ({fmtDate(weekDates[0])} - {fmtDate(weekDates[6])})
           </span>
         </div>
         <div className="flex gap-[8px]">
@@ -250,7 +258,28 @@ export function SchedulePanel() {
 
       {semesterOver && (
         <div className="mb-[12px] p-[8px_12px] rounded-[6px] text-[12px] bg-[var(--bg-tertiary)] border border-[var(--accent)] text-[var(--text-primary)]">
-          学期已结束（第 {maxWeek} 周），展示全部课程供参考 —— 可导入新学期课表
+          当前第 {currentWeek} 周，课表数据止于第 {maxWeek} 周（本学期已结束）—— 可浏览历史周次，或点击右上角导入新学期课表
+        </div>
+      )}
+
+      {/* 周次浏览 */}
+      {maxWeek > 0 && (
+        <div className="flex items-center gap-[8px] mb-[12px]">
+          <button onClick={() => setDisplayWeek(Math.max(1, effectiveWeek - 1))} disabled={effectiveWeek <= 1}
+            className="p-[4px_12px] rounded-[6px] bg-[var(--bg-tertiary)] border border-[var(--border)] text-[12px] text-[var(--text-secondary)] disabled:opacity-30">
+            ← 上周
+          </button>
+          <span className="text-[12px] font-semibold">第 {effectiveWeek} 周</span>
+          <button onClick={() => setDisplayWeek(Math.min(maxWeek, effectiveWeek + 1))} disabled={effectiveWeek >= maxWeek}
+            className="p-[4px_12px] rounded-[6px] bg-[var(--bg-tertiary)] border border-[var(--border)] text-[12px] text-[var(--text-secondary)] disabled:opacity-30">
+            下周 →
+          </button>
+          {displayWeek !== 0 && (
+            <button onClick={() => setDisplayWeek(0)}
+              className="p-[4px_12px] rounded-[6px] bg-[var(--accent-dim)] border border-[var(--accent)] text-[12px] text-[var(--accent)]">
+              回到当前周
+            </button>
+          )}
         </div>
       )}
 
@@ -267,9 +296,7 @@ export function SchedulePanel() {
         {[1, 2, 3, 4, 5, 6, 7].map(day => {
           const items = schedule.filter(s => {
             if (s.day !== day) return false;
-            // 学期结束后回退：视为所有周都激活
-            if (!semesterOver && !isWeekActive(s.weeks, currentWeek)) return false;
-            return true;
+            return isWeekActive(s.weeks, effectiveWeek);
           });
           const dateObj = weekDates[day - 1];
           const dateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`;
