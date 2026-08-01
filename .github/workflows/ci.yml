@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
           cache: npm
 
       - name: Python deps
-        run: pip install requests ruff==0.16.1 pytest
+        run: pip install -r requirements.txt ruff==0.16.1
 
       - name: Node deps
         run: npm ci
