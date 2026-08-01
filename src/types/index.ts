@@ -111,6 +111,7 @@ export interface Question {
   id: string; subject: SubjectKey; chapter: string; type: QuestionType;
   stem: string; options?: string[]; answer: string; analysis: string;
   difficulty: Difficulty; tags: string[]; source: 'manual' | 'ai' | 'import'; createdAt: string;
+  favorite?: boolean;  // 收藏/标记（对标 EXAM-MASTER 收藏功能）
 }
 
 export interface Attempt {

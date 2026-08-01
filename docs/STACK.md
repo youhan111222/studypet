@@ -32,6 +32,10 @@
 ### 3. 元信息与可发现性
 - `index.html` 补 description / theme-color / manifest / apple-touch-icon
 
+### 4. 收藏/标记题目 —— 借鉴 EXAM-MASTER
+- `Question.favorite?` 字段 + Dexie 持久化（`setQuestionFavorite` / `getFavoriteQuestions`）
+- 刷题页题目卡右上角 ☆/★ 一键收藏（本地题库量级小，用 filter 查询，避开 Dexie 对 boolean 索引的类型限制）
+
 ## 四、结论与后续可选方向（未做，按需）
 
 | 方向 | 成本 | 收益 | 结论 |

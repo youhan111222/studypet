@@ -50,6 +50,7 @@ interface QuizStore {
   nextQuestion: () => void;
   nextReviewQuestion: () => void;
   updateAttemptTags: (attemptId: string, tags: ErrorTag[]) => Promise<void>;
+  toggleFavorite: (questionId: string) => Promise<void>;
 
   reviewCards: ReviewCard[];
   reviewIndex: number;
@@ -323,6 +324,20 @@ export const useQuizStore = create<QuizStore>((set, get) => ({
     set({ dueCount: newCount });
     } catch (e) {
       console.error('submitReviewRating 失败:', e);
+    }
+  },
+
+  toggleFavorite: async (questionId: string) => {
+    try {
+      const q = await db.questions.get(questionId);
+      if (!q) return;
+      const favorite = !q.favorite;
+      await db.setQuestionFavorite(questionId, favorite);
+      set(s => ({
+        questions: s.questions.map(x => (x.id === questionId ? { ...x, favorite } : x)),
+      }));
+    } catch (e) {
+      console.error('toggleFavorite failed:', e);
     }
   },
 

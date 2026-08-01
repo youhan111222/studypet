@@ -34,6 +34,18 @@ export class StudyPetDB extends Dexie {
       .toArray();
   }
 
+  async setQuestionFavorite(questionId: string, favorite: boolean) {
+    return this.questions.update(questionId, { favorite });
+  }
+
+  async getFavoriteQuestions(subject?: string, limit = 200) {
+    // 本地题库量级小（数百题），filter 比 boolean 索引更类型安全；Dexie 类型不支持 boolean 键
+    const all = await this.questions.toArray();
+    return all
+      .filter(q => q.favorite === true && (!subject || q.subject === subject))
+      .slice(0, limit);
+  }
+
   async getDueReviews(limit = 500) {
     // Include cards due today or past due (24-hour window)
     const todayEnd = new Date();

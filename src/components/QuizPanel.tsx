@@ -15,7 +15,7 @@ export function QuizPanel() {
   const navigate = useNavigate();
   const { questions, currentIndex, selectedAnswer, showResult, lastAttempt,
           correctCount, wrongCount,
-          loadQuestions, selectAnswer, submitAnswer, nextQuestion, updateAttemptTags, generateQuestion } = useQuizStore();
+          loadQuestions, selectAnswer, submitAnswer, nextQuestion, updateAttemptTags, generateQuestion, toggleFavorite } = useQuizStore();
   const [selectedTags, setSelectedTags] = useState<ErrorTag[]>([]);
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [pendingSelf, setPendingSelf] = useState(false);
@@ -192,6 +192,13 @@ export function QuizPanel() {
             {q.difficulty === 'easy' ? '简单' : q.difficulty === 'hard' ? '困难' : '中等'}
           </span>
           <span className="text-xs text-[var(--text-muted)]">{q.chapter}</span>
+          <button
+            onClick={() => toggleFavorite(q.id)}
+            title={q.favorite ? '取消收藏' : '收藏本题'}
+            className={`ml-auto text-lg leading-none transition-transform hover:scale-125 ${q.favorite ? 'text-[#f5c518]' : 'text-[var(--text-muted)]'}`}
+          >
+            {q.favorite ? '★' : '☆'}
+          </button>
         </div>
         <div className="text-base leading-relaxed mb-6 text-[var(--text-primary)]">
           {q.stem}
