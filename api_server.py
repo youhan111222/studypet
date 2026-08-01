@@ -927,6 +927,17 @@ if __name__ == "__main__":
     # 确保活动表索引存在（幂等，加速按日期统计）
     try:
         conn = get_db()
+        # 确保表结构存在（api_server 独立启动/CI 空库时无 activity 表，直接查询会 no such table）
+        conn.execute("""CREATE TABLE IF NOT EXISTS activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            window_title TEXT,
+            process_name TEXT,
+            category TEXT DEFAULT 'other',
+            start_time TEXT,
+            duration_seconds INTEGER DEFAULT 0,
+            date TEXT,
+            is_idle INTEGER DEFAULT 0
+        )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_date ON activity(date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_date_category ON activity(date, category)")
         conn.commit()
