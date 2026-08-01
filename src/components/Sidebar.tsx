@@ -1,8 +1,9 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import { exportBackup, importBackup } from '../lib/backup';
 import { useStore } from '../store/useStore';
 import { useQuizStore } from '../store/quizStore';
 import { localToday } from '../utils';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 const metricColorClass: Record<string, string> = {
   '#ff8c00': 'text-[var(--orange)]',
@@ -32,6 +33,7 @@ export function Sidebar() {
   const activityLogs = useStore(s => s.activityLogs);
   const activeTimerSubject = useStore(s => s.activeTimerSubject);
   const autoPlan = useStore(s => s.autoPlan);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const toggleAutoPlan = useStore(s => s.toggleAutoPlan);
   const { dueCount, refreshDueCount } = useQuizStore();
 
@@ -107,11 +109,38 @@ export function Sidebar() {
       <div className="border-t border-[var(--border)] pt-[8px] flex flex-col gap-[6px]">
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-[var(--text-secondary)]">🤖 自动规划</span>
-          <button onClick={toggleAutoPlan} className={`w-[36px] h-[20px] rounded-[10px] border-none cursor-pointer relative ${autoPlan ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'}`}>
+          <button onClick={toggleAutoPlan} className={'w-[36px] h-[20px] rounded-[10px] border-none cursor-pointer relative transition-[background] duration-200 ' + (autoPlan ? 'bg-[#4ecca3]' : 'bg-[#2a2f3a]')}>
             <div className="w-[16px] h-[16px] rounded-full bg-[#fff] absolute top-[2px] transition-[left] duration-200" style={{
               left: autoPlan ? 18 : 2,
             }} />
           </button>
+        </div>
+        <div className="flex items-center gap-[6px] pt-[4px]">
+          <button
+            onClick={exportBackup}
+            title="导出本地数据为备份文件"
+            className="flex-1 p-[4px_8px] rounded-[6px] border border-[var(--border)] bg-[var(--bg-card)] text-[11px] text-[var(--text-secondary)] cursor-pointer hover:border-[#4ecca380]"
+          >
+            ⬇ 备份
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title="从备份文件恢复数据（覆盖当前本地数据）"
+            className="flex-1 p-[4px_8px] rounded-[6px] border border-[var(--border)] bg-[var(--bg-card)] text-[11px] text-[var(--text-secondary)] cursor-pointer hover:border-[#4ecca380]"
+          >
+            ⬆ 恢复
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importBackup(f).catch((err) => alert('恢复失败：' + (err instanceof Error ? err.message : String(err))));
+              e.target.value = '';
+            }}
+          />
         </div>
       </div>
     </div>

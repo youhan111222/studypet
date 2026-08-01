@@ -35,10 +35,26 @@
         ]
       },
       "examStructure": {
-        "单选题": {"count": 20, "perScore": 3, "total": 60},
-        "填空题": {"count": 10, "perScore": 4, "total": 40},
-        "判断题": {"count": 10, "perScore": 2, "total": 20},
-        "计算题": {"count": 5, "perScore": 16, "total": 80}
+        "单选题": {
+          "count": 20,
+          "perScore": 3,
+          "total": 60
+        },
+        "填空题": {
+          "count": 10,
+          "perScore": 4,
+          "total": 40
+        },
+        "判断题": {
+          "count": 10,
+          "perScore": 2,
+          "total": 20
+        },
+        "计算题": {
+          "count": 5,
+          "perScore": 16,
+          "total": 80
+        }
       }
     },
     "math": {
@@ -67,9 +83,21 @@
         ]
       },
       "examStructure": {
-        "单选题": {"count": 20, "perScore": 2, "total": 40},
-        "填空题": {"count": 10, "perScore": 3, "total": 30},
-        "计算题": {"count": 6, "perScore": 5, "total": 30}
+        "单选题": {
+          "count": 20,
+          "perScore": 2,
+          "total": 40
+        },
+        "填空题": {
+          "count": 10,
+          "perScore": 3,
+          "total": 30
+        },
+        "计算题": {
+          "count": 6,
+          "perScore": 5,
+          "total": 30
+        }
       }
     },
     "politics": {
@@ -115,12 +143,36 @@
       },
       "currentAffairs": "2025年1月1日-12月31日国内外重大时事",
       "examStructure": {
-        "单选题": {"count": 20, "perScore": 1, "total": 20},
-        "多选题": {"count": 10, "perScore": 2, "total": 20},
-        "辨析题": {"count": 2, "perScore": 7, "total": 14},
-        "问答题": {"count": 3, "perScore": 7, "total": 21},
-        "论述题": {"count": 1, "perScore": 10, "total": 10},
-        "材料分析题": {"count": 1, "perScore": 15, "total": 15}
+        "单选题": {
+          "count": 20,
+          "perScore": 1,
+          "total": 20
+        },
+        "多选题": {
+          "count": 10,
+          "perScore": 2,
+          "total": 20
+        },
+        "辨析题": {
+          "count": 2,
+          "perScore": 7,
+          "total": 14
+        },
+        "问答题": {
+          "count": 3,
+          "perScore": 7,
+          "total": 21
+        },
+        "论述题": {
+          "count": 1,
+          "perScore": 10,
+          "total": 10
+        },
+        "材料分析题": {
+          "count": 1,
+          "perScore": 15,
+          "total": 15
+        }
       }
     },
     "english": {
@@ -137,19 +189,58 @@
         "writing": "约100词简短应用文，格式规范、内容切题、条理清晰、语法正确"
       },
       "chapters": {
-        "核心能力": [
-          "词汇3000词 + 构词法识别生词",
-          "基本语法规则",
-          "阅读理解：主旨要义/具体信息/词义推断/判断推理/文章结构/作者意图/快速查找",
-          "写作：100词应用文（信函/通知/邮件等）"
+        "词汇": [
+          "核心词汇 3000 词（高频词/真题词）",
+          "构词法：词根词缀派生（-tion/-ness/un-/re-）",
+          "近义词辨析与固定搭配（短语动词）"
+        ],
+        "语法": [
+          "时态语态（完成时/进行时/被动语态）",
+          "非谓语动词（不定式/动名词/分词）",
+          "三大从句（定语/名词性/状语从句）",
+          "虚拟语气与倒装",
+          "情态动词与主谓一致"
+        ],
+        "阅读理解": [
+          "主旨要义与文章结构",
+          "具体信息定位与词义推断",
+          "判断推理与作者意图"
+        ],
+        "完形填空": [
+          "语境逻辑与词义辨析（上下文线索）",
+          "语法衔接（连词/代词/时态一致）"
+        ],
+        "写作": [
+          "应用文 100 词：信函/通知/邮件格式",
+          "内容切题与条理（三段式结构）"
         ]
       },
       "examStructure": {
-        "阅读理解": {"count": 15, "perScore": 2, "total": 30},
-        "信息匹配": {"count": 5, "perScore": 2, "total": 10},
-        "完形填空": {"count": 15, "perScore": 2, "total": 30},
-        "语法填空": {"count": 10, "perScore": 1.5, "total": 15},
-        "写作": {"count": 1, "perScore": 15, "total": 15}
+        "阅读理解": {
+          "count": 15,
+          "perScore": 2,
+          "total": 30
+        },
+        "信息匹配": {
+          "count": 5,
+          "perScore": 2,
+          "total": 10
+        },
+        "完形填空": {
+          "count": 15,
+          "perScore": 2,
+          "total": 30
+        },
+        "语法填空": {
+          "count": 10,
+          "perScore": 1.5,
+          "total": 15
+        },
+        "写作": {
+          "count": 1,
+          "perScore": 15,
+          "total": 15
+        }
       }
     }
   }
