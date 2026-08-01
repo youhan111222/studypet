@@ -1,0 +1,130 @@
+{
+ "1": {
+  "answer": "B",
+  "analysis": "LLM???llm:Bx3/3"
+ },
+ "2": {
+  "answer": "D",
+  "analysis": "LLM???llm:Dx3/3"
+ },
+ "3": {
+  "answer": "B",
+  "analysis": "LLM???llm:Bx3/3"
+ },
+ "4": {
+  "answer": "C",
+  "analysis": "LLM???llm:Cx3/3"
+ },
+ "6": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "7": {
+  "answer": "D",
+  "analysis": "LLM???llm:Dx3/3"
+ },
+ "8": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "9": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "10": {
+  "answer": "C",
+  "analysis": "LLM???llm:Cx3/3"
+ },
+ "11": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "12": {
+  "answer": "B",
+  "analysis": "LLM???llm:Bx3/3"
+ },
+ "13": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "15": {
+  "answer": "D",
+  "analysis": "LLM???llm:Dx3/3"
+ },
+ "16": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "18": {
+  "answer": "D",
+  "analysis": "LLM???llm:Dx3/3"
+ },
+ "19": {
+  "answer": "B",
+  "analysis": "LLM???llm:Bx3/3"
+ },
+ "20": {
+  "answer": "B",
+  "analysis": "LLM???llm:Bx3/3"
+ },
+ "21": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "22": {
+  "answer": "B",
+  "analysis": "LLM???llm:Bx2/3"
+ },
+ "23": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "24": {
+  "answer": "D",
+  "analysis": "LLM???llm:Dx3/3"
+ },
+ "25": {
+  "answer": "B",
+  "analysis": "LLM???llm:Bx3/3"
+ },
+ "26": {
+  "answer": "B",
+  "analysis": "LLM???llm:Bx3/3"
+ },
+ "27": {
+  "answer": "D",
+  "analysis": "LLM???llm:Dx3/3"
+ },
+ "28": {
+  "answer": "C",
+  "analysis": "LLM???llm:Cx3/3"
+ },
+ "29": {
+  "answer": "B",
+  "analysis": "LLM???llm:Bx3/3"
+ },
+ "30": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "31": {
+  "answer": "D",
+  "analysis": "LLM???llm:Dx3/3"
+ },
+ "32": {
+  "answer": "C",
+  "analysis": "LLM???llm:Cx3/3"
+ },
+ "33": {
+  "answer": "C",
+  "analysis": "LLM???llm:Cx3/3"
+ },
+ "34": {
+  "answer": "A",
+  "analysis": "LLM???llm:Ax3/3"
+ },
+ "35": {
+  "answer": "D",
+  "analysis": "LLM???llm:Dx3/3"
+ }
+}

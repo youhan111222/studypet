@@ -34,13 +34,43 @@ try:
 except ImportError:
     HAS_ENGINE = False
 
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+import gzip as _gzip
+import ssl as _ssl
+
+UA_LIST = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+]
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "zhenti")
 
 
-def _fetch(url, timeout=20):
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    return urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8", errors="replace")
+def _fetch(url, timeout=20, retries=2):
+    """带 UA 轮换 / gzip / 重试的 GET（book118、renrendoc 等对裸 urllib 有 TLS 指纹拦截，
+    此函数通过轮换 UA + 容错 SSL 尽量穿透；仍失败时用 open_page/浏览器通道兜底）。"""
+    last_err = None
+    ctx = _ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = _ssl.CERT_NONE
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": UA_LIST[attempt % len(UA_LIST)],
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.6",
+                "Accept-Encoding": "gzip",
+                "Referer": "https://www.google.com/",
+            })
+            with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+                body = resp.read()
+                if resp.headers.get("Content-Encoding", "").lower() == "gzip":
+                    body = _gzip.decompress(body)
+                return body.decode("utf-8", errors="replace")
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
+    raise last_err
 
 
 def _clean_surrogates(s):
@@ -114,6 +144,54 @@ def parse_exam_page(html):
         if len(stem) > 6:
             out.append({"type": tm.group(1) if tm else "?", "stem": stem, "options": opts})
     return out
+
+
+def parse_doc_text(text):
+    """解析 renrendoc / book118 类文档正文（适合 open_page 抓回的纯文本）。
+
+    兼容紧凑排版（选项连排）：1.题干（）A.选项B.选项C.选项D.选项答案：A解析：...
+    支持大题标题：一、单项选择题 / 二、多项选择题 / 三、判断题
+    """
+    if not text:
+        return []
+    text = re.sub(r"[\r\n\t\u3000]+", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    sections = re.split(r"(一、单项选择题|二、多项选择题|三、判断题|四、简答题|五、论述题|六、作文题)", text)
+    items = []
+    for i in range(1, len(sections), 2):
+        sec_name, sec = sections[i], sections[i + 1]
+        if "单项" in sec_name:
+            qtype = "single"
+        elif "多项" in sec_name:
+            qtype = "multiple"
+        elif "判断" in sec_name:
+            qtype = "truefalse"
+        else:
+            continue
+        # 题号定位：数字. 开头（排除解析里的 (1). 枚举：要求前面不是 ( 或数字）
+        qs = list(re.finditer(r"(?<![\d(（A-Za-z])(\d{1,2})\.", sec))
+        for idx, m in enumerate(qs):
+            start, end = m.end(), qs[idx + 1].start() if idx + 1 < len(qs) else len(sec)
+            chunk = sec[start:end]
+            am = re.search(r"答案[:：]\s*([A-D]+)\s*解析[:：]?", chunk)
+            if not am:
+                continue
+            ans = am.group(1)
+            pre, post = chunk[:am.start()], chunk[am.end():]
+            stem, opts = "", []
+            om = re.match(r"(.*?)(?:A\.)\s*(.*?)(?:B\.)\s*(.*?)(?:C\.)\s*(.*?)(?:D\.)\s*(.*)$", pre, re.S)
+            if om:
+                stem = re.sub(r"\s+", " ", om.group(1)).strip()
+                opts = [re.sub(r"\s+", " ", g).strip() for g in om.groups()[1:]]
+            else:
+                stem = re.sub(r"\s+", " ", pre).strip()
+            analysis = re.sub(r"\s+", " ", post).strip()
+            # 去掉题干里用于占位的（）
+            stem = stem.rstrip("（( ）)")
+            if len(stem) >= 6:
+                items.append({"num": m.group(1), "type": qtype, "stem": stem,
+                              "options": opts, "answer": ans, "analysis": analysis})
+    return items
 
 
 def parse_generic_page(html):
@@ -336,13 +414,17 @@ def gen_seed(data, answers, subject, chapter_map=None):
         if not ans:
             print(f"[warn] 缺少答案: {key} {q['stem'][:30]}", file=sys.stderr)
         qid = f"imp-{int(time.time()) % 100000}-{i}"
+        tags = ["真题"]
+        _yr = (q.get("src") or [None])[0]
+        if _yr and re.fullmatch(r"20\d{2}", str(_yr)):
+            tags.append(str(_yr))
         stem = json.dumps(q["stem"], ensure_ascii=False)
         opts = json.dumps(q.get("options", []) or [], ensure_ascii=False)
         ana = json.dumps(ana, ensure_ascii=False)
         chapter = (chapter_map or {}).get(q.get("src", [None, ""])[0] if q.get("src") else "", "综合")
-        lines.append(f"  {{ id: '{qid}', subject: '{subject}', chapter: '{chapter}', type: 'single',")
+        lines.append(f"  {{ id: '{qid}', subject: '{subject}', chapter: '{chapter}', type: '{q.get('type', 'single')}',")
         lines.append(f"    stem: {stem}, options: {opts},")
-        lines.append(f"    answer: '{ans}', analysis: {ana}, difficulty: 'medium', tags: ['真题'], source: 'import', createdAt: '2026-08-01' }},")
+        lines.append(f"    answer: '{ans}', analysis: {ana}, difficulty: 'medium', tags: {tags}, source: 'import', createdAt: '2026-08-01' }},")
     return "\n".join(lines)
 
 
@@ -361,6 +443,10 @@ def main():
     p3 = sub.add_parser("page", help="解析任意真题网页")
     p3.add_argument("--url", required=True)
     p3.add_argument("--out", required=True)
+
+    p31 = sub.add_parser("doc", help="解析文档正文纯文本（renrendoc/book118 格式，配合 open_page 抓回内容）")
+    p31.add_argument("--file", required=True, help="包含正文的 txt 文件")
+    p31.add_argument("--out", required=True)
 
     p4 = sub.add_parser("gen", help="生成 seed.ts 片段")
     p4.add_argument("--dedup", action="store_true", help="与 src/seed.ts 已有题目去重")
@@ -405,12 +491,24 @@ def main():
         json.dump(results, open(args.out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         print(f"{len(results)} 题 -> {args.out}")
 
+    elif args.cmd == "doc":
+        text = open(args.file, encoding="utf-8", errors="replace").read()
+        results = parse_doc_text(text)
+        json.dump(results, open(args.out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        print(f"{len(results)} 题 -> {args.out}")
+
     elif args.cmd == "gen":
         data = json.load(open(args.data, encoding="utf-8"))
         if isinstance(data, dict):
             data = data.get("new_items") or data.get("items") or []
         answers = json.load(open(args.answers, encoding="utf-8")) if args.answers else None
-        if answers is None and HAS_ENGINE:
+        if answers is None:
+            answers = {}
+            for q in data:
+                if q.get("answer"):
+                    answers[str(q.get("id") or q.get("num", ""))] = {
+                        "answer": q["answer"], "analysis": q.get("analysis", "")}
+        if not answers and HAS_ENGINE:
             answers = {}
             auto, pending = 0, 0
             for q in data:

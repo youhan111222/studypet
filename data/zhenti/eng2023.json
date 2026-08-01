@@ -1,0 +1,546 @@
+[
+ {
+  "num": "1",
+  "type": "single",
+  "stem": "I'll accept any job ___ I don't have to get up early.",
+  "options": [
+   "even if",
+   "as long as",
+   "in case",
+   "even though"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "2",
+  "type": "single",
+  "stem": "___ of the two authors thinks that the danger of a nuclear war is increasing.",
+  "options": [
+   "None",
+   "Either",
+   "Both",
+   "Neither"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "3",
+  "type": "single",
+  "stem": "I walked too much yesterday and ___ are still aching now.",
+  "options": [
+   "my leg's muscles",
+   "my leg muscles",
+   "my muscles of leg",
+   "my legs' muscles"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "4",
+  "type": "single",
+  "stem": "In some countries, ___ is called \"equality\" does not really mean equal rights for all people.",
+  "options": [
+   "which",
+   "that",
+   "what",
+   "this"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "6",
+  "type": "single",
+  "stem": "The bridge was named ___ the hero who had given his life to save a child.",
+  "options": [
+   "after",
+   "by",
+   "with",
+   "from"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "7",
+  "type": "single",
+  "stem": "There is no ___ in insisting on the impossible.",
+  "options": [
+   "mind",
+   "meaning",
+   "help",
+   "sense"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "8",
+  "type": "single",
+  "stem": "The Internet of the fourth generation is now in the experimental stage. The time will come when it ___ possible for ordinary people to use it in their daily life.",
+  "options": [
+   "is",
+   "will be",
+   "must be",
+   "maybe"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "9",
+  "type": "single",
+  "stem": "The shopping mall ___ built a few months ago is in the south of the city.",
+  "options": [
+   "located",
+   "lied",
+   "laid",
+   "placed"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "10",
+  "type": "single",
+  "stem": "It may be five to ten years ___ we can test this medicine on human patients.",
+  "options": [
+   "since",
+   "after",
+   "before",
+   "when"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "11",
+  "type": "single",
+  "stem": "Bob, Dick and Tom are 6, 8, and 10 years old ___.",
+  "options": [
+   "respectively",
+   "respectably",
+   "respectedly",
+   "respectful"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "12",
+  "type": "single",
+  "stem": "Children who are over-protected by their parents may become ___.",
+  "options": [
+   "hurt",
+   "spoiled",
+   "damaged",
+   "harmed"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "13",
+  "type": "single",
+  "stem": "Your explanation is still not easy enough to understand. Could you give any ___ examples?",
+  "options": [
+   "specific",
+   "special",
+   "specialist",
+   "spare"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "15",
+  "type": "single",
+  "stem": "Robert Owen's ideas were far ___ the age in which he lived.",
+  "options": [
+   "in front of",
+   "advanced in",
+   "advancing in",
+   "in advance of"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "16",
+  "type": "single",
+  "stem": "Rural communities are usually more ___ in their child-rearing methods, while in the town there is more variety.",
+  "options": [
+   "uniform",
+   "like",
+   "similar",
+   "same"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "18",
+  "type": "single",
+  "stem": "Mark often attempts to escape ___ whenever he breaks traffic rules.",
+  "options": [
+   "having been fined",
+   "to have been fined",
+   "to be fined",
+   "being fined"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "19",
+  "type": "single",
+  "stem": "The police were accused of failing to ___ the people about the threat of the terrorists.",
+  "options": [
+   "speak",
+   "tell",
+   "talk",
+   "say"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "20",
+  "type": "single",
+  "stem": "Radio, television and press are ___ of conveying news and information.",
+  "options": [
+   "the most three common means",
+   "the three most common means",
+   "the most common three means",
+   "three the most common means"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "21",
+  "type": "single",
+  "stem": "___ backward technologically we are for the moment, we have perfect faith in our ability to catch up with the developed countries in time.",
+  "options": [
+   "as",
+   "if",
+   "so",
+   "that"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "22",
+  "type": "single",
+  "stem": "We don't need air conditioning, ___.",
+  "options": [
+   "and neither can we afford it",
+   "neither can we afford it",
+   "and nor we can afford it",
+   "we can afford it neither"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "23",
+  "type": "single",
+  "stem": "The Internet allows businessmen to ___ their goods by showing which items are sold and how fast they are moving.",
+  "options": [
+   "keep track of",
+   "keep pace with",
+   "keep in touch with",
+   "keep company with"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "24",
+  "type": "single",
+  "stem": "That field ___ a good crop of potatoes last year.",
+  "options": [
+   "planted",
+   "grew",
+   "raised",
+   "yielded"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "25",
+  "type": "single",
+  "stem": "The destruction of these cultural relics was a loss that no amount of money could ___.",
+  "options": [
+   "stand up to",
+   "make up for",
+   "come up with",
+   "put up with"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "26",
+  "type": "single",
+  "stem": "When people do not ___ to acceptable standards of behavior, they are bound to offend other people.",
+  "options": [
+   "confirm",
+   "conform",
+   "confine",
+   "inform"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "27",
+  "type": "single",
+  "stem": "It was such a big challenge. Luckily, the student was just about to ___ the questions when he suddenly found the answer.",
+  "options": [
+   "arrive at",
+   "work out",
+   "work on",
+   "give up"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "28",
+  "type": "single",
+  "stem": "Once he starts talking about ancient China, ___.",
+  "options": [
+   "there is no stopping of him",
+   "he is not stopped",
+   "there is no stopping him",
+   "it is no stopping him"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "29",
+  "type": "single",
+  "stem": "They decided to chase the cow away ___ it did more damage to the crops.",
+  "options": [
+   "unless",
+   "before",
+   "until",
+   "although"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "30",
+  "type": "single",
+  "stem": "The ___ of blood always makes him feel sick.",
+  "options": [
+   "sight",
+   "look",
+   "view",
+   "glance"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "31",
+  "type": "single",
+  "stem": "In Britain, the best time for sightseeing is ___ spring and early summer.",
+  "options": [
+   "later",
+   "latter",
+   "last",
+   "late"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "32",
+  "type": "single",
+  "stem": "I should like to rent a house which is modern, comfortable and, ___, in a quiet neighborhood.",
+  "options": [
+   "in all",
+   "after all",
+   "above all",
+   "overall"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "33",
+  "type": "single",
+  "stem": "When Mr. Jones gets old, he will ___ over his business to his son.",
+  "options": [
+   "take",
+   "think",
+   "hand",
+   "get"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "34",
+  "type": "single",
+  "stem": "I've already told you that I'm going to buy it, ___.",
+  "options": [
+   "however much it costs",
+   "however does it costs much",
+   "how much does it cost",
+   "no matter how it costs"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ },
+ {
+  "num": "35",
+  "type": "single",
+  "stem": "Free medical treatment in this country covers ___ illness of all kinds for all the citizens.",
+  "options": [
+   "normal",
+   "average",
+   "regular",
+   "ordinary"
+  ],
+  "answer": "",
+  "analysis": "",
+  "src": [
+   "2023",
+   "英语"
+  ]
+ }
+]
