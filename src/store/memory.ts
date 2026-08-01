@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { localDateStr, localToday } from '../utils';
 
 export interface MemoryItem {
   id: string;
@@ -35,8 +36,8 @@ export const useMemoryStore = create<MemoryStore>()(
         const newItem: MemoryItem = {
           ...item,
           id: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          createdAt: new Date().toISOString().slice(0, 10),
-          updatedAt: new Date().toISOString().slice(0, 10),
+          createdAt: localToday(),
+          updatedAt: localToday(),
         };
         set(state => ({ memories: [...state.memories, newItem] }));
       },
@@ -45,7 +46,7 @@ export const useMemoryStore = create<MemoryStore>()(
         set(state => ({
           memories: state.memories.map(m =>
             m.id === id
-              ? { ...m, ...updates, updatedAt: new Date().toISOString().slice(0, 10) }
+              ? { ...m, ...updates, updatedAt: localToday() }
               : m
           ),
         }));
@@ -71,7 +72,7 @@ export const useMemoryStore = create<MemoryStore>()(
       clearOldMemories: (olderThanDays) => {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - olderThanDays);
-        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        const cutoffStr = localDateStr(cutoff);
 
         set(state => ({
           memories: state.memories.filter(m => {
@@ -88,7 +89,7 @@ export const useMemoryStore = create<MemoryStore>()(
       partialize: (state) => {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 90);
-        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        const cutoffStr = localDateStr(cutoff);
         return {
           memories: state.memories.filter(m => m.priority >= 8 || m.updatedAt >= cutoffStr),
         };

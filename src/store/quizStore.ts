@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from 'ts-fsrs';
 import { db } from '../db';
 import { useStore } from './useStore';
+import { localToday } from '../utils';
 import { archiveMistake } from '../lib/secondbrain';
 import type { Question, Attempt, ReviewCard, SubjectKey, ErrorTag, MasteryLevel } from '../types';
 
@@ -26,7 +27,7 @@ function maybeArchiveMistake(q: Question, userAnswer: string, errorTags: ErrorTa
     userAnswer,
     analysis: q.analysis || '',
     errorTags: errorTags || [],
-    date: new Date().toISOString().slice(0, 10),
+    date: localToday(),
   });
 }
 
@@ -279,7 +280,7 @@ export const useQuizStore = create<QuizStore>((set, get) => ({
         stem: data.stem, options: data.options, answer: data.answer,
         analysis: data.analysis || '', difficulty: 'medium',
         tags: data.tags || [], source: 'ai',
-        createdAt: new Date().toISOString().slice(0, 10),
+        createdAt: localToday(),
       };
       await db.questions.put(q);
       return q;
@@ -309,7 +310,7 @@ export const useQuizStore = create<QuizStore>((set, get) => ({
     const attempt: Attempt = {
       id: `${q.id}-review-${Date.now()}`,
       questionId: q.id,
-      date: new Date().toISOString().slice(0, 10),
+      date: localToday(),
       userAnswer: isCorrect ? q.answer : '(复习)',
       isCorrect,
       timeSpent: 0,
@@ -367,37 +368,32 @@ export async function syncSubjectProgress(subject: SubjectKey) {
   }
 
   // 更新 Zustand store（totalMinutes 由学习计时器维护，不做答题时长估计，避免重复累计/双重计费）
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
+  const todayAttempts = attempts.filter(a => a.date === today).length;
 
   const existingChapters = new Map((progress.chapterDetails || []).map(c => [c.name, c]));
 
+  // 幂等同步：只在掌握度变化时写入；countAsReview=false 不 bump 复习次数/顺延下次复习（打开页面≠复习）
   for (const [ch, stats] of Object.entries(chapterStats)) {
     const rate = stats.correct / stats.total;
     const mastery = accuracyToMastery(rate, stats.total);
     const existing = existingChapters.get(ch);
-
-    useStore.getState().updateChapterMastery(subject, ch, mastery);
-
-    // Also update reviewCount on the chapter
-    if (existing) {
-      const chapterDetail = progress.chapterDetails?.find(c => c.name === ch);
-      if (chapterDetail) {
-        // updateChapterMastery handles the update, but we also want to bump reviewDate
-        storeState.updateSubjectProgress(subject, {
-          lastStudyDate: today,
-        });
-      }
+    if (!existing || existing.mastery !== mastery) {
+      useStore.getState().updateChapterMastery(subject, ch, mastery, { countAsReview: false });
     }
   }
 
   // Mark chapters not yet quizzed but in syllabus as 'not_started'
   for (const q of questions) {
     if (!chapterStats[q.chapter] && !existingChapters.has(q.chapter)) {
-      useStore.getState().updateChapterMastery(subject, q.chapter, 'not_started');
+      useStore.getState().updateChapterMastery(subject, q.chapter, 'not_started', { countAsReview: false });
     }
   }
 
-  storeState.updateSubjectProgress(subject, {
-    lastStudyDate: today,
-  });
+  // 仅当今天有答题记录才更新 lastStudyDate（仅打开页面不算学习）
+  if (todayAttempts > 0) {
+    storeState.updateSubjectProgress(subject, {
+      lastStudyDate: today,
+    });
+  }
 }

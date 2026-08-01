@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { Question, Attempt, ReviewCard } from './types';
+import { localDateStr } from './utils';
 
 export class StudyPetDB extends Dexie {
   questions!: Table<Question, string>;
@@ -57,7 +58,7 @@ export class StudyPetDB extends Dexie {
   async cleanupOldData(keepDays = 90, maxAiQuestions = 500) {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - keepDays);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const cutoffStr = localDateStr(cutoff);
     await this.attempts.where('date').below(cutoffStr).delete();
 
     const aiQuestions = (await this.questions.toArray()).filter(q => q.source === 'ai');

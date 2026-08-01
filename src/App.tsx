@@ -17,6 +17,7 @@ import { ImportantPanel } from './components/ImportantPanel';
 import { ScreenTimePanel } from './components/ScreenTimePanel';
 import { ReminderHost } from './hooks/useReminders';
 import { API } from './config';
+import { localDateStr, localToday } from './utils';
 
 export default function App() {
   const sessions = useStore(s => s.sessions);
@@ -65,18 +66,28 @@ export default function App() {
       const data = await res.json();
       if (data?.apps || data?.totalActiveMinutes !== undefined) {
         if (trackerStatusRef.current !== 'online') setTrackerStatus('online');
-        const today = new Date().toISOString().slice(0, 10);
-        const mapped = (data.apps || []).map((r: any, i: number) => ({
-          id: `real-${i}`, appName: r.appName, category: r.category,
+        const today = localToday();
+        const mapped = (data.apps || []).map((r: any) => ({
+          id: `real-${r.appName}-${r.category}`, appName: r.appName, category: r.category,
           startTime: '', duration: r.duration, date: today,
         }));
         syncActivityLogs(mapped);
         const studyMinutes = data.effectiveStudyMinutes ?? (
           (data.apps || []).filter((a: any) => a.category === 'study').reduce((s: number, a: any) => s + a.duration, 0)
         );
-        updateWeekStats({ focusHours: studyMinutes / 60 });
         // 学习时长纳入连胜判定（每天 ≥30 分钟有效学习也算打卡）
         useStore.getState().recordStudyMinutes(today, studyMinutes);
+        // 本周专注 = 本周一到今天的真实累计（不能拿今日值冒充周值）
+        const st = useStore.getState();
+        const now = new Date();
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1));
+        const mondayStr = localDateStr(monday);
+        let weekMin = 0;
+        for (const [d, m] of Object.entries(st.studyDays)) {
+          if (d >= mondayStr && d <= today) weekMin += m;
+        }
+        updateWeekStats({ focusHours: weekMin / 60 });
       }
     } catch {
       if (trackerStatusRef.current === 'online') setTrackerStatus('offline');
@@ -92,14 +103,14 @@ export default function App() {
   useEffect(() => {
     const state = useStore.getState();
     const tasks = state.tasks;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const completedDates = new Set<string>();
     tasks.forEach(t => { if (t.completed) completedDates.add(t.date || today); });
     let streak = 0;
     const now = new Date();
     for (let i = 0; i < 365; i++) {
       const d = new Date(now); d.setDate(d.getDate() - i);
-      if (completedDates.has(d.toISOString().slice(0, 10))) streak++;
+      if (completedDates.has(localDateStr(d))) streak++;
       else break;
     }
     if (streak !== state.streak) useStore.setState({ streak });

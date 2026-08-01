@@ -139,6 +139,32 @@ def _write_activity(params, is_idle=0, label="活动记录", attempts=3, backoff
             logger.warning(f"写入{label}失败 (db locked?): {e}")
     return False
 
+
+def _flush_segment(title, proc, cat, start_ts, duration, date_str, label="活动记录", attempts=3, backoff=0.5):
+    """写入/刷新当前活动段：已落盘则 UPDATE（长会话双写双计根因），否则 INSERT。锁冲突重试。"""
+    for attempt in range(attempts):
+        try:
+            cur = conn.execute(
+                "SELECT id FROM activity WHERE start_time=? AND process_name=? AND is_idle=0 ORDER BY id DESC LIMIT 1",
+                (start_ts, proc)
+            )
+            row = cur.fetchone()
+            if row:
+                conn.execute(
+                    "UPDATE activity SET duration_seconds=?, window_title=?, category=?, date=? WHERE id=?",
+                    (duration, title, cat, date_str, row[0])
+                )
+            else:
+                conn.execute(_ACTIVITY_INSERT, (title, proc, cat, start_ts, duration, date_str, 0))
+            conn.commit()
+            return True
+        except sqlite3.OperationalError as e:
+            if attempt < attempts - 1:
+                time.sleep(backoff * (attempt + 1))
+                continue
+            logger.warning(f"写入{label}失败 (db locked?): {e}")
+    return False
+
 # === Windows API 获取前台窗口 ===
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -471,11 +497,10 @@ def _run_main_loop():
                     if not last_idle_logged and last_proc:
                         duration = int(now - last_start)
                         cat = classify(last_title, last_proc)
-                        _write_activity(
-                            (last_title, last_proc, cat,
-                             datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-                             duration, date_str),
-                            is_idle=0, label="空闲记录"
+                        _flush_segment(
+                            last_title, last_proc, cat,
+                            datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                            duration, date_str, label="空闲记录"
                         )
                         safe_print({
                             "event": "idle_start",
@@ -509,11 +534,10 @@ def _run_main_loop():
                     if last_proc and not last_idle_logged:
                         duration = int(now - last_start)
                         cat = classify(last_title, last_proc)
-                        _write_activity(
-                            (last_title, last_proc, cat,
-                             datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-                             duration, date_str),
-                            is_idle=0, label="窗口切换记录"
+                        _flush_segment(
+                            last_title, last_proc, cat,
+                            datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                            duration, date_str, label="窗口切换记录"
                         )
                         safe_print({
                             "event": "switch",
@@ -527,24 +551,13 @@ def _run_main_loop():
                     last_start = now
                     last_idle_logged = False
 
-                # 增量落盘：每 60s 刷新/补写当前会话，防止进程被强杀（Stop-Process -Force）时丢失长会话
+                # 增量落盘：每 60s 刷新当前会话，防止进程被强杀（Stop-Process -Force）时丢失长会话；
+                # 与结束段写入共用 _flush_segment（UPDATE-or-INSERT），杜绝长会话双写双计
                 if not is_idle and last_proc and not last_idle_logged and (now - last_start) >= 60:
-                    try:
-                        dur = int(now - last_start)
-                        start_ts = datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S")
-                        cur = conn.execute(
-                            "SELECT id FROM activity WHERE start_time=? AND process_name=? AND is_idle=0 ORDER BY id DESC LIMIT 1",
-                            (start_ts, last_proc)
-                        )
-                        row = cur.fetchone()
-                        if row:
-                            conn.execute("UPDATE activity SET duration_seconds=? WHERE id=?", (dur, row[0]))
-                        else:
-                            cat = classify(last_title, last_proc)
-                            conn.execute(_ACTIVITY_INSERT, (last_title, last_proc, cat, start_ts, dur, date_str, 0))
-                        conn.commit()
-                    except sqlite3.Error as e:
-                        logger.warning(f"增量落盘失败: {e}")
+                    dur = int(now - last_start)
+                    start_ts = datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S")
+                    _flush_segment(last_title, last_proc, classify(last_title, last_proc),
+                                   start_ts, dur, date_str, label="增量落盘")
 
                 time.sleep(POLL_SEC)
 
@@ -561,11 +574,10 @@ def _run_main_loop():
         if last_proc and not last_idle_logged:
             duration = int(time.time() - last_start)
             cat = classify(last_title, last_proc)
-            if _write_activity(
-                (last_title, last_proc, cat,
-                 datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-                 duration, datetime.now().strftime("%Y-%m-%d")),
-                is_idle=0, label="最后活动记录"
+            if _flush_segment(
+                last_title, last_proc, cat,
+                datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                duration, datetime.now().strftime("%Y-%m-%d"), label="最后活动记录"
             ):
                 logger.info(f"保存最后活动: {last_proc} ({duration}s)")
         conn.close()

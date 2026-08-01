@@ -200,6 +200,12 @@ SUBJECT_DIR_ALIASES = {
     "高等数学": ["高数"],
 }
 
+# 错题/复习登记允许的科目（英文 key 或知识库中文目录名）；其余一律拒绝，防止路径穿越写任意目录
+MISTAKE_SUBJECT_ALLOW = {
+    "electronics", "math", "english", "politics",
+    "电子", "电子技术", "电子技术基础", "高等数学", "高数", "数学", "英语", "政治",
+}
+
 # 仅允许本地来源跨域访问，禁止任意网页读取/改写本地服务
 ALLOWED_ORIGINS = {
     "http://localhost:5173", "http://127.0.0.1:5173",
@@ -716,7 +722,9 @@ def _sb_tracker_due_items(rows, today):
                 continue
             if due_date <= today_d:
                 due.append(iv)
-                overdue.append((today_d - due_date).days)
+                od = (today_d - due_date).days
+                if od > 0:
+                    overdue.append(od)  # 仅真正超期（>0 天）计入，今天到期不算超期
         if due or overdue:
             items.append({
                 "id": r["id"],
@@ -854,7 +862,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
     def _handle_patina(self, parsed):
         params = dict(urllib.parse.parse_qsl(parsed.query))
         try:
-            days = int(params.get("days", 14))
+            days = max(1, min(int(params.get("days", 14)), 365))
         except ValueError:
             days = 14
         conn = self._patina_connect()
@@ -920,6 +928,9 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         subject = params.get("subject", "")
         if not subject:
             self.wfile.write(json.dumps({"error": "缺少 subject 参数"}).encode())
+            return
+        if subject not in MISTAKE_SUBJECT_ALLOW:
+            self.wfile.write(json.dumps({"error": "subject 参数不合法"}).encode())
             return
         try:
             days = max(1, min(int(params.get("days", "14")), 365))
@@ -1029,7 +1040,9 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         if not subject or not point:
             self._respond({"error": "缺少 subject/point 字段"})
             return
-        cn_map = {"电子": "电子", "高数": "高数", "数学": "高数", "英语": "英语", "政治": "政治"}
+        cn_map = {"电子": "电子", "电子技术": "电子", "电子技术基础": "电子",
+                  "高数": "高数", "高等数学": "高数", "数学": "高数",
+                  "英语": "英语", "政治": "政治"}
         subject = cn_map.get(subject, subject)
         today = datetime.now().strftime("%Y-%m-%d")
         row = f"| {today} | {point} | {subject} | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |"
@@ -1050,6 +1063,9 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         stem = str(data.get("stem", "")).strip()
         if not subject or not stem:
             self._respond({"error": "缺少 subject/stem 字段"})
+            return
+        if subject not in MISTAKE_SUBJECT_ALLOW:
+            self._respond({"error": "subject 参数不合法"})
             return
         date = str(data.get("date", "")).strip() or datetime.now().strftime("%Y-%m-%d")
         if _sb_parse_date(date) is None:

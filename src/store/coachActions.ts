@@ -1,4 +1,5 @@
 import { useStore } from './useStore';
+import { localToday } from '../utils';
 
 /**
  * 解析教练回复中的 [ACTION:xxx] 指令并执行。
@@ -72,7 +73,7 @@ export function executeCoachActions(content: string): { cleanContent: string; su
         addImportant({
           id, title,
           content: payload.content || '', priority: (payload.priority === 'high' ? 'high' : 'normal') as 'high' | 'normal',
-          done: false, createdAt: new Date().toISOString().slice(0, 10),
+          done: false, createdAt: localToday(),
           remindAt: payload.remindAt || payload.time || undefined,
         });
         const remindNote = payload.remindAt ? `（${payload.remindAt}前1小时提醒）` : '';
@@ -157,7 +158,7 @@ export function executeCoachActions(content: string): { cleanContent: string; su
       case 'add_practice_log': {
         addPracticeLog({
           id: `pl-${Date.now()}`,
-          date: new Date().toISOString().slice(0, 10),
+          date: localToday(),
           subject: payload.subject,
           chapter: payload.chapter || '',
           checklistUsed: payload.checklistUsed || '',

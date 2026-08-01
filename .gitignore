@@ -23,3 +23,5 @@ tsconfig.tsbuildinfo
 
 tracker.lock
 *.lock
+
+activity.db.bak-*

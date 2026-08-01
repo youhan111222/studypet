@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { useQuizStore, syncSubjectProgress } from '../store/quizStore';
 import { useNavigate } from 'react-router-dom';
 import type { SubjectKey } from '../types';
+import { localToday } from '../utils';
 import {
   fetchReviewDue, checkReview, getDiary, saveDiary,
   subjectName, daysSinceDate, reviewOrdinal, reviewOverdueDays,
@@ -75,7 +76,7 @@ export function Dashboard() {
 
   // 收工日记：统计 + 待复习摘要 → SecondBrain 日记
   const handleDiary = async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const studyMin = activityLogs
       .filter(l => l.date === today && l.category === 'study')
       .reduce((s, l) => s + l.duration, 0);
@@ -111,7 +112,7 @@ export function Dashboard() {
     })();
   }, []);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const todayStudyMin = activityLogs
     .filter(l => l.date === today && l.category === 'study')
     .reduce((s, l) => s + l.duration, 0);

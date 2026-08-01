@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { ImportantItem } from '../types';
+import { localToday } from '../utils';
 
 export function ImportantPanel() {
   const items = useStore(s => s.importantItems);
@@ -12,9 +13,6 @@ export function ImportantPanel() {
   const [content, setContent] = useState('');
   const [priority, setPriority] = useState<'high' | 'normal'>('normal');
   const [remindAt, setRemindAt] = useState('');
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimerRef = useRef<number | null>(null);
-  const firedRef = useRef<Set<string>>(new Set());
 
   const active = items.filter(i => !i.done);
   const done = items.filter(i => i.done);
@@ -31,42 +29,15 @@ export function ImportantPanel() {
       title: title.trim(),
       content: content.trim(),
       priority,
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: localToday(),
       done: false,
       remindAt: remind,
     });
     setTitle(''); setContent(''); setPriority('normal'); setRemindAt(''); setShowAdd(false);
   };
 
-  // 到点提醒：每 30s 检查未完成且有 remindAt 的事项（误差 1 分钟），通知 + 页内 toast 双通道
-  useEffect(() => {
-    const check = () => {
-      const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      const dateKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-      for (const item of items) {
-        if (item.done || !item.remindAt) continue;
-        const [h, m] = item.remindAt.split(':').map(Number);
-        if (Number.isNaN(h) || Number.isNaN(m)) continue;
-        if (Math.abs(nowMin - (h * 60 + m)) > 1) continue;
-        const key = `${item.id}@${dateKey}`;
-        if (firedRef.current.has(key)) continue;
-        firedRef.current.add(key);
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          try { new Notification('StudyPet 提醒', { body: item.title }); } catch { /* 通知被拦截时忽略 */ }
-        }
-        setToast(item.title);
-        if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-        toastTimerRef.current = window.setTimeout(() => setToast(null), 6000);
-      }
-    };
-    check();
-    const id = window.setInterval(check, 30000);
-    return () => {
-      window.clearInterval(id);
-      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    };
-  }, [items]);
+  // 到点提醒统一由全局 useReminders()（App.tsx 的 ReminderHost）轮询，
+  // 面板内不再重复实现，避免同一条提醒同时弹两次
 
   return (
     <div className="p-[20px_24px] h-full overflow-y-auto">
@@ -153,12 +124,6 @@ export function ImportantPanel() {
         </div>
       )}
 
-      {/* 页内提醒 toast（通知不可用时兜底展示） */}
-      {toast && (
-        <div className="fixed bottom-[16px] right-[16px] z-[300] p-[10px_16px] rounded-[10px] text-[13px] shadow-[var(--shadow-pop)] bg-[var(--bg-card)] border border-[var(--border-strong)]">
-          ⏰ {toast}
-        </div>
-      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { inferSubjectFromTitle } from '../utils';
+import { inferSubjectFromTitle, localDateStr, localToday } from '../utils';
 import type { Task, Pet, Achievement, ChatMessage, ChatSession, WeekStats, ScheduleItem, ActivityLog, ImportantItem, SubjectProgress, SubjectKey, ExamRecord, MasteryLevel, StudyChecklist, PracticeLog } from '../types';
 // 课表数据来自权威课表（XLS 解析），不再内置 seed
 
@@ -22,9 +22,11 @@ interface Store {
   syncActivityLogs: (logs: ActivityLog[]) => void;
   /** 记录某天的学习时长（分钟），供 streak 打卡判定（≥30 分钟算打卡） */
   recordStudyMinutes: (date: string, minutes: number) => void;
+  /** 计时器分钟数累加计入当日打卡（连胜判定）；tracker 当日累计走 recordStudyMinutes 的 max 语义 */
+  addStudyMinutes: (date: string, minutes: number) => void;
   addImportant: (item: ImportantItem) => void; toggleImportant: (id: string) => void; deleteImportant: (id: string) => void;
   updateSubjectProgress: (subject: SubjectKey, updates: Partial<SubjectProgress>) => void;
-  updateChapterMastery: (subject: SubjectKey, chapter: string, mastery: MasteryLevel) => void;
+  updateChapterMastery: (subject: SubjectKey, chapter: string, mastery: MasteryLevel, opts?: { countAsReview?: boolean }) => void;
   addStudyChecklist: (checklist: StudyChecklist) => void; toggleChecklistItem: (checklistId: string, itemIndex: number) => void; deleteStudyChecklist: (id: string) => void;
   addPracticeLog: (log: PracticeLog) => void;
   examRecords: ExamRecord[];
@@ -131,7 +133,7 @@ function computeStreak(tasks: Task[], studyDays: Record<string, number>, today: 
   for (let i = 0; i < 365; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = localDateStr(d);
     if (checkinDates.has(dateStr)) {
       streak++;
     } else {
@@ -176,7 +178,7 @@ export const useStore = create<Store>()(
       pet: defaultPet,
       achievements: defaultAchievements,
       sessions: [],
-      activeSessionDate: new Date().toISOString().slice(0, 10),
+      activeSessionDate: localToday(),
       weekStats: { focusHours: 0, tasksCompleted: 0, pomodoroCount: 0, tasksSkipped: 0 },
       streak: 0,
       studyDays: {},
@@ -195,7 +197,7 @@ export const useStore = create<Store>()(
       timerAccumulatedSeconds: 0,
 
       toggleTask: (id) => set(state => {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localToday();
         // 勾选完成时把任务日期记为完成日（跨天补打卡才算今天，保证 streak 正确）
         // rewarded 标记首次完成即永久置 true：取消勾选不回滚，避免反复勾选重复奖励
         const wasRewarded = state.tasks.find(t => t.id === id)?.rewarded === true;
@@ -268,7 +270,7 @@ export const useStore = create<Store>()(
         return updates;
       }),
       addTask: (task) => set(state => ({
-        tasks: [...state.tasks, { ...task, date: task.date || new Date().toISOString().slice(0, 10) }]
+        tasks: [...state.tasks, { ...task, date: task.date || localToday() }]
       })),
       deleteTask: (id) => set(state => ({ tasks: state.tasks.filter(t => t.id !== id) })),
       addMessage: (date, msg) => set(state => {
@@ -285,14 +287,14 @@ export const useStore = create<Store>()(
         // 保持最近 30 天
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 30);
-        const cutoffStr = cutoff.toISOString().slice(0, 10);
+        const cutoffStr = localDateStr(cutoff);
         return { sessions: sessions.filter(s => s.date >= cutoffStr) };
       }),
       updateSessionSummary: (date, summary) => set(state => ({
         sessions: state.sessions.map(s => s.date === date ? { ...s, summary } : s)
       })),
       toggleCoach: () => set(state => {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localToday();
         return { coachOpen: !state.coachOpen, activeSessionDate: today };
       }),
       toggleAddTask: () => set(state => ({ addTaskOpen: !state.addTaskOpen })),
@@ -308,7 +310,7 @@ export const useStore = create<Store>()(
           id: `plan-${Date.now()}-${i}`, title: p.title, period: getPeriod(p.time),
           time: p.time, duration: 60, tags: p.tag ? [p.tag] : [],
           completed: false, source: p.source || 'manual', pomodoroCount: 0,
-          date: p.date || new Date().toISOString().slice(0, 10),
+          date: p.date || localToday(),
         }));
         set(state => ({ tasks: [...state.tasks.filter(t => !t.id.startsWith('plan-')), ...newTasks] }));
       },
@@ -334,10 +336,20 @@ export const useStore = create<Store>()(
         updates.achievements = computeStateAchievements({ ...state, ...updates }, streak);
         return updates;
       }),
+      addStudyMinutes: (date, minutes) => set(state => {
+        // 计时器分钟累加计入当日打卡（连胜判定）；tracker 累计走上面的 max 语义，互不冲突
+        if (!(minutes > 0)) return {};
+        const studyDays = { ...state.studyDays, [date]: (state.studyDays[date] || 0) + minutes };
+        const updates: Partial<Store> = { studyDays };
+        const streak = computeStreak(state.tasks, studyDays, date);
+        updates.streak = streak;
+        updates.achievements = computeStateAchievements({ ...state, ...updates }, streak);
+        return updates;
+      }),
       toggleAutoPlan: () => set(state => ({ autoPlan: !state.autoPlan })),
       addImportant: (item) => set(state => ({ importantItems: [...state.importantItems, item] })),
       toggleImportant: (id) => set(state => ({
-        importantItems: state.importantItems.map(i => i.id === id ? { ...i, done: !i.done, doneAt: !i.done ? new Date().toISOString().slice(0, 10) : undefined } : i),
+        importantItems: state.importantItems.map(i => i.id === id ? { ...i, done: !i.done, doneAt: !i.done ? localToday() : undefined } : i),
       })),
       deleteImportant: (id) => set(state => ({ importantItems: state.importantItems.filter(i => i.id !== id) })),
       updateSubjectProgress: (subject, updates) => set(state => ({
@@ -353,18 +365,24 @@ export const useStore = create<Store>()(
         examRecords: state.examRecords.filter(r => r.id !== id),
       })),
       // ====== 知识体系：章节掌握 + 学习清单 + 刻意练习 ======
-      updateChapterMastery: (subject, chapter, mastery) => set(state => {
-        const today = new Date().toISOString().slice(0, 10);
+      updateChapterMastery: (subject, chapter, mastery, opts) => set(state => {
+        const today = localToday();
+        const countAsReview = opts?.countAsReview !== false;
         const details = [...state.subjectProgress[subject].chapterDetails];
         const idx = details.findIndex(c => c.name === chapter);
         const nextMap: Record<MasteryLevel, number> = { not_started: 1, learning: 2, review_needed: 1, mastered: 7 };
-        const nextDate = new Date();
-        nextDate.setDate(nextDate.getDate() + (nextMap[mastery] || 3));
-        const nextReview = nextDate.toISOString().slice(0, 10);
+        const reviewFields = {
+          lastReviewDate: today,
+          reviewCount: (idx >= 0 ? details[idx].reviewCount : 0) + 1,
+          nextReviewDate: localDateStr(new Date(Date.now() + (nextMap[mastery] || 3) * 86400000)),
+        };
         if (idx >= 0) {
-          details[idx] = { ...details[idx], mastery, lastReviewDate: today, reviewCount: details[idx].reviewCount + 1, nextReviewDate: nextReview };
+          // 被动同步（countAsReview=false）：只改掌握度，打开页面≠复习，不 bump 次数/顺延日期
+          details[idx] = countAsReview ? { ...details[idx], mastery, ...reviewFields } : { ...details[idx], mastery };
         } else {
-          details.push({ name: chapter, mastery, lastReviewDate: today, reviewCount: 1, nextReviewDate: nextReview });
+          details.push(countAsReview
+            ? { name: chapter, mastery, ...reviewFields }
+            : { name: chapter, mastery, lastReviewDate: today, reviewCount: 0, nextReviewDate: undefined });
         }
         return {
           subjectProgress: { ...state.subjectProgress, [subject]: { ...state.subjectProgress[subject], chapterDetails: details, lastStudyDate: today } },
@@ -393,8 +411,9 @@ export const useStore = create<Store>()(
         if (state.activeTimerSubject && state.activeTimerSubject !== subject) {
           const elapsed = state.timerAccumulatedSeconds + (state.timerStartTime ? (now - state.timerStartTime) / 1000 : 0);
           const totalMin = Math.round(elapsed / 60);
-          const today = new Date().toISOString().slice(0, 10);
+          const today = localToday();
           const prevSubject = state.activeTimerSubject;
+          useStore.getState().addStudyMinutes(today, totalMin);
           set({
             subjectProgress: {
               ...state.subjectProgress,
@@ -433,8 +452,10 @@ export const useStore = create<Store>()(
         const now = Date.now();
         const elapsed = state.timerAccumulatedSeconds + (state.timerStartTime ? (now - state.timerStartTime) / 1000 : 0);
         const totalMin = Math.round(elapsed / 60);
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localToday();
         const subject = state.activeTimerSubject;
+        // 计时分钟计入当日打卡（连胜判定）
+        useStore.getState().addStudyMinutes(today, totalMin);
         const next: Partial<Store> = {
           subjectProgress: {
             ...state.subjectProgress,
@@ -467,7 +488,7 @@ export const useStore = create<Store>()(
           const sessionMap: Record<string, ChatMessage[]> = {};
           for (const msg of oldMessages) {
             const ts = parseInt(msg.id.split('-')[1] || String(Date.now()));
-            const date = new Date(ts).toISOString().slice(0, 10);
+            const date = localDateStr(new Date(ts));
             if (!sessionMap[date]) sessionMap[date] = [];
             sessionMap[date].push(msg);
           }
@@ -478,7 +499,7 @@ export const useStore = create<Store>()(
               return { id: date, date, label: `${d.getMonth() + 1}月${d.getDate()}日 ${dayNames[d.getDay()]}`, messages: msgs };
             });
           persisted.state.sessions = sessions;
-          persisted.state.activeSessionDate = new Date().toISOString().slice(0, 10);
+          persisted.state.activeSessionDate = localToday();
           delete persisted.state.messages;
         }
         // 确保 subjectProgress 中每个科目都有 chapterDetails
@@ -493,15 +514,15 @@ export const useStore = create<Store>()(
       },
       partialize: (state) => {
         // 30 天裁剪：只保留近期数据，防止 localStorage 无限膨胀
-        const cutoff30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-        const cutoffYear = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+        const cutoff30 = localDateStr(new Date(Date.now() - 30 * 86400000));
+        const cutoffYear = localDateStr(new Date(Date.now() - 365 * 86400000));
         return {
-          tasks: state.tasks.filter(t => !t.completed || (t.date ? t.date >= cutoff30 : true)),
+          tasks: state.tasks.filter(t => !t.completed || (t.date ? t.date >= cutoffYear : true)),
           pet: state.pet,
           achievements: state.achievements,
           streak: state.streak,
           studyDays: Object.fromEntries(
-            Object.entries(state.studyDays).filter(([date]) => date >= cutoff30)
+            Object.entries(state.studyDays).filter(([date]) => date >= cutoffYear)
           ),
           weekStats: state.weekStats,
           schedule: state.schedule,

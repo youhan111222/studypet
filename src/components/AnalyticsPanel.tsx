@@ -545,7 +545,7 @@ function KnowledgeView() {
   const masteryColors: Record<string, string> = { not_started: '#666', learning: '#0a84ff', review_needed: '#f59e0b', mastered: '#4ecca3' };
   const masteryLabels: Record<string, string> = { not_started: '未开始', learning: '学习中', review_needed: '需复习', mastered: '已掌握' };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr(new Date());
 
   return (
     <div className="flex flex-col gap-3">

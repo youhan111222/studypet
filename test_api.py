@@ -256,7 +256,7 @@ def test_secondbrain_review_due(api_server, sb_root):
     assert it["point"] == "函数极限"
     assert it["lastStudyDate"] == d_due
     assert it["due"] == [1]
-    assert it["overdue"] == [0]
+    assert it["overdue"] == []  # 今天到期不算超期
     assert it["checked"] == []
 
 

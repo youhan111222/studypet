@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { useQuizStore } from '../store/quizStore';
+import { localToday } from '../utils';
 import { useEffect } from 'react';
 
 const metricColorClass: Record<string, string> = {
@@ -36,7 +37,7 @@ export function Sidebar() {
 
   useEffect(() => { refreshDueCount(); }, []);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const todayStudyMin = activityLogs
     .filter(l => l.date === today && l.category === 'study')
     .reduce((s, l) => s + l.duration, 0);

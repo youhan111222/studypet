@@ -3,9 +3,9 @@ import { useStore } from '../store/useStore';
 import { useMemoryStore } from '../store/memory';
 import { analyzeState } from '../store/stateAnalyzer';
 import { executeCoachActions } from '../store/coachActions';
-import { isWeekInRange, parseDate } from '../utils';
+import { isWeekInRange, localDateStr, localToday, parseDate } from '../utils';
 import type { ChatMessage, SubjectKey, SubjectProgress } from '../types';
-import { API, SEMESTER_START, getCurrentWeek } from '../config';
+import { API, EXAM_DATE, SEMESTER_START, getCurrentWeek } from '../config';
 import { fetchReviewDue, getSecondBrainState, describeReviewDue, subjectName } from '../lib/secondbrain';
 
 const TOTAL_WEEKS = 17;
@@ -13,7 +13,7 @@ const MIN_WIDTH = 380;
 const MAX_WIDTH = 700;
 
 function getTodayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 function formatTabLabel(dateStr: string, isToday: boolean): string {
@@ -64,7 +64,7 @@ export function CoachPanel() {
   const yesterdayStr = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
+    return localDateStr(d);
   }, []);
   const yesterdaySession = sessions.find(s => s.date === yesterdayStr);
   const yesterdaySummary = yesterdaySession?.summary;
@@ -142,7 +142,7 @@ export function CoachPanel() {
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      dates.push(d.toISOString().slice(0, 10));
+      dates.push(localDateStr(d));
     }
     return dates;
   }, []);
@@ -330,7 +330,7 @@ export function CoachPanel() {
         const mMap: Record<string, string> = { not_started: '未开始', learning: '学习中', review_needed: '需复习' };
         subjectLines.push(`    薄弱章节: ${weakChapters.map((c: any) => `${c.name}(${mMap[c.mastery] || c.mastery})`).join(', ')}`);
         // 到期需复习的章节
-        const todayStr2 = new Date().toISOString().slice(0, 10);
+        const todayStr2 = localToday();
         const dueReview = cd.filter((c: any) => c.nextReviewDate && c.nextReviewDate <= todayStr2 && c.mastery !== 'mastered');
         if (dueReview.length > 0) {
           subjectLines.push(`    ⏰ 到期待复习: ${dueReview.map((c: any) => c.name).join(', ')}`);
@@ -350,7 +350,7 @@ export function CoachPanel() {
       .map(([k]) => subjectNames[k]);
     const studyTimeLines = recentSubjects.length > 0 ? `  ${recentSubjects.join(', ')}` : '  近7天无科目复习记录';
 
-    const estimatedExamDate = parseDate('2027-03-25');
+    const estimatedExamDate = parseDate(EXAM_DATE);
     const daysUntilExam = Math.ceil((estimatedExamDate.getTime() - todayDate.getTime()) / 86400000);
     const weeksUntilExam = Math.floor(daysUntilExam / 7);
 
@@ -487,7 +487,7 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
     for (let i = 0; i < 7; i++) {
       const d = new Date(mondayDate);
       d.setDate(mondayDate.getDate() + i);
-      weekDates.push(d.toISOString().slice(0, 10));
+      weekDates.push(localDateStr(d));
     }
 
     const context = `【系统时间】${currentTime}\n` + buildContext(todayDateStr, todayFull, weekDates);

@@ -1,3 +1,15 @@
+/** 本地时区 YYYY-MM-DD（toISOString 是 UTC，凌晨 0-8 点会错一天，本地日期一律走这里） */
+export function localToday(): string {
+  return localDateStr(new Date());
+}
+
+export function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /** 解析日期字符串，支持 ISO 和 yyyy-MM-dd、yyyy/MM/dd */
 export function parseDate(s: string): Date {
   const d = new Date(s);
