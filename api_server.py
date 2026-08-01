@@ -54,7 +54,7 @@ def _load_env():
     env_path = os.path.join(BASE_DIR, ".env")
     if os.path.exists(env_path):
         try:
-            with open(env_path, "r", encoding="utf-8") as f:
+            with open(env_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
@@ -95,7 +95,7 @@ def load_study_keywords():
     if not os.path.exists(KEYWORDS_FILE):
         return {}
     try:
-        with open(KEYWORDS_FILE, "r", encoding="utf-8") as f:
+        with open(KEYWORDS_FILE, encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError):
         return {}

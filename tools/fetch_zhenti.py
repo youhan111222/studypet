@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """StudyPet 真题抓取工具（可复用管道）
 
 通道：
@@ -61,13 +60,23 @@ def parse_st_page(html):
         return None
     qtype, qbody = m.group(1), m.group(2)
     qbody = re.sub(r"\s+", " ", qbody).strip()
-    opts = re.findall(r"([A-D])\s*[、.．]\s*([^\x00]{1,150}?)(?=\s*[A-D]\s*[、.．]|\s*$)", qbody)
-    stem = re.sub(r"\s*[A-D]\s*[、.．]\s*[^\x00]{1,150}", "", qbody).strip()
+    # 题干取到第一个选项标记（A. / A、 / A．）为止，避免误删题干正文
+    opt_start = re.search(r"\s*[A-D]\s*[、.．]\s*", qbody)
+    if opt_start:
+        stem = qbody[:opt_start.start()].strip()
+        opt_text = qbody[opt_start.start():]
+    else:
+        stem, opt_text = qbody, ""
+    opts = re.findall(r"([A-D])\s*[、.．]\s*([^\x00]{1,150}?)(?=\s*[A-D]\s*[、.．]|\s*$)", opt_text)
+    opts = [re.sub(r"\s*点击进入查看答案\s*$", "", _clean_surrogates(o[1].strip())).strip() for o in opts]
+    stem = _clean_surrogates(stem)
+    if len(stem) < 8 or len(opts) < 2:
+        return None  # 明显截断/损坏，宁缺毋滥
     src = re.search(r"(\d{4})年广东[^：:]*?([\u4e00-\u9fa5A-Za-z]+?)真题", body)
     return {
         "type": qtype,
-        "stem": _clean_surrogates(stem),
-        "options": [_clean_surrogates(o[1].strip()) for o in opts],
+        "stem": stem,
+        "options": opts,
         "src": list(src.groups()) if src else None,
     }
 
@@ -129,8 +138,9 @@ def parse_generic_page(html):
         opt_m = re.search(r"A[、.．]\s*(.+?)\s*B[、.．]\s*(.+?)\s*C[、.．]\s*(.+?)\s*D[、.．]\s*(.+?)\s*$", seg, re.DOTALL)
         if opt_m:
             stem = seg[:opt_m.start()].strip()
-            opts = [g.strip() for g in opt_m.groups()]
-            if len(stem) > 4 and all(len(o) > 0 for o in opts):
+            opts = [re.sub(r"\s*点击进入查看答案\s*$", "", g).strip() for g in opt_m.groups()]
+            stem_ok = len(stem) >= 8 and ("___" in stem or "____" in stem or "？" in stem or "?" in stem or len(stem) >= 15)
+            if stem_ok and all(len(o) > 1 for o in opts):
                 tm = re.search(r"【?(单选|多选|判断)题?】?", stem)
                 out.append({"num": num, "type": tm.group(1) if tm else "?", "stem": stem, "options": opts})
     return out
@@ -175,7 +185,7 @@ _SUBJECT_KEYWORDS = {
 }
 
 # 阅读题/无短文特征（无法作答的题）
-_READONLY_MARKS = ["passage", "paragraph", "underlined", "main idea", "main purpose", "infer", "the story", "the tone", "本文", "文章", "短文", "第\d+段", "What can we learn", "What is the main"]
+_READONLY_MARKS = ["passage", "paragraph", "underlined", "main idea", "main purpose", "infer", "the story", "the tone", "本文", "文章", "短文", "第\\d+段", "What can we learn", "What is the main"]
 
 
 def classify_subject(item):
@@ -326,12 +336,13 @@ def gen_seed(data, answers, subject, chapter_map=None):
         if not ans:
             print(f"[warn] 缺少答案: {key} {q['stem'][:30]}", file=sys.stderr)
         qid = f"imp-{int(time.time()) % 100000}-{i}"
-        stem = q["stem"].replace('"', '\\"')
-        opts = ", ".join(f'"{o.replace(chr(34), chr(92) + chr(34))}"' for o in q.get("options", []) or [])
+        stem = json.dumps(q["stem"], ensure_ascii=False)
+        opts = json.dumps(q.get("options", []) or [], ensure_ascii=False)
+        ana = json.dumps(ana, ensure_ascii=False)
         chapter = (chapter_map or {}).get(q.get("src", [None, ""])[0] if q.get("src") else "", "综合")
         lines.append(f"  {{ id: '{qid}', subject: '{subject}', chapter: '{chapter}', type: 'single',")
-        lines.append(f"    stem: \"{stem}\", options: {'[' + opts + ']' if opts else 'undefined'},")
-        lines.append(f"    answer: '{ans}', analysis: \"{ana}\", difficulty: 'medium', tags: ['真题'], source: 'import', createdAt: '2026-08-01' }},")
+        lines.append(f"    stem: {stem}, options: {opts},")
+        lines.append(f"    answer: '{ans}', analysis: {ana}, difficulty: 'medium', tags: ['真题'], source: 'import', createdAt: '2026-08-01' }},")
     return "\n".join(lines)
 
 
@@ -360,7 +371,7 @@ def main():
     p5.add_argument("--subject", help="只保留指定科目（politics/english/math/electronics）")
     p5.add_argument("--out", help="输出 JSON（含报告+新题）")
 
-    p6 = sub.add_parser("stats", help="扫描 seed.ts 生成统计并更新 docs/zhenti-stats.md")
+    sub.add_parser("stats", help="扫描 seed.ts 生成统计并更新 docs/zhenti-stats.md")
     p4.add_argument("--data", required=True)
     p4.add_argument("--answers")
     p4.add_argument("--subject", default="politics")

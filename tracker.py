@@ -75,7 +75,7 @@ def _acquire_lock():
         except FileExistsError:
             # 已有锁：检查持有者是否存活
             try:
-                with open(LOCK_FILE, "r") as f:
+                with open(LOCK_FILE) as f:
                     pid = int(f.read().strip())
                 if _process_alive(pid):
                     logger.error(f"另一个 tracker 实例正在运行 (PID {pid})，退出")

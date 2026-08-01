@@ -4,7 +4,12 @@ SparrowMCP — B站搜索 + Obsidian笔记检索 + PDF检索
 MCP stdio 协议，Claude Code 可直调
 """
 
-import json, sys, os, re, glob, urllib.request, urllib.parse
+import json
+import os
+import re
+import sys
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 OBSIDIAN_VAULT = r"D:\SecondBrain"
@@ -66,8 +71,6 @@ def bilibili_search(keyword, max_results=10):
                 continue
         if body is None:
             return [{"error": "bilibili API unreachable"}]
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            body = resp.read()
 
         # B站API常返回含无效代理字符的JSON，在字节层面处理
         text = body.decode("utf-8", errors="replace")
@@ -159,7 +162,7 @@ def search_obsidian(query, max_results=MAX_RESULTS):
                     if len(matches) >= 3:
                         break
 
-            total_line_hits = len([l for l in lines if any(kw in l.lower() for kw in keywords)])
+            total_line_hits = len([ln for ln in lines if any(kw in ln.lower() for kw in keywords)])
             found.append({
                 "file": str(md_file.relative_to(vault)),
                 "path": str(md_file),
@@ -197,7 +200,8 @@ def search_pdfs(query, max_results=10):
             reader = PdfReader(str(pdf_file))
             for page in reader.pages[:10]:
                 t = page.extract_text()
-                if t: text += t
+                if t:
+                    text += t
 
             text_lower = text.lower()
             if not all(kw in text_lower for kw in keywords):
@@ -274,13 +278,13 @@ def fetch_url(url, max_chars=8000):
         text = re.sub(r'&nbsp;|&lt;|&gt;|&amp;|&quot;', ' ', text)
         text = re.sub(r'\s+', ' ', text)
         # 去重连续重复行
-        lines = [l.strip() for l in text.split('\n') if l.strip()]
+        lines = [ln.strip() for ln in text.split('\n') if ln.strip()]
         seen = set()
         deduped = []
-        for l in lines:
-            if l not in seen:
-                deduped.append(l)
-                seen.add(l)
+        for ln in lines:
+            if ln not in seen:
+                deduped.append(ln)
+                seen.add(ln)
 
         text = '\n'.join(deduped)[:int(max_chars)]
 

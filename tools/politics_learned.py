@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # 自动生成：从 seed.ts 已录政治真题学习（zhenti_engine 自学习表）
 # 重新生成：python tools/learn_from_seed.py
 LEARNED_POLITICS = {

@@ -56,7 +56,7 @@ def _sb_parse_date(s):
 
 
 def _sb_read_text(path):
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return f.read()
 
 

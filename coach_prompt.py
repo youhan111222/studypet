@@ -13,7 +13,7 @@ def _load_knowledge_base():
     if not os.path.exists(pdf_file):
         return ""
     try:
-        with open(pdf_file, "r", encoding="utf-8", errors="ignore") as f:
+        with open(pdf_file, encoding="utf-8", errors="ignore") as f:
             raw = f.read()
     except OSError:
         return ""
@@ -55,7 +55,7 @@ def get_study_guide(subject: str) -> str:
     if key not in _GUIDE_CACHE:
         guide_file = os.path.join(_GUIDE_DIR, f"{key}.md")
         try:
-            with open(guide_file, "r", encoding="utf-8") as f:
+            with open(guide_file, encoding="utf-8") as f:
                 _GUIDE_CACHE[key] = f.read()
         except OSError:
             _GUIDE_CACHE[key] = ""
@@ -107,7 +107,7 @@ def build_system_prompt(context: dict, user_message: str = "") -> str:
     syllabus_file = os.path.join(BASE_DIR, "exam_syllabus.json")
     if os.path.exists(syllabus_file):
         try:
-            with open(syllabus_file, "r", encoding="utf-8") as f:
+            with open(syllabus_file, encoding="utf-8") as f:
                 syllabus = json.load(f)
             syllabus_text = f"""
 【官方考纲 — 学习地图（权威基准）】
