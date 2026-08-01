@@ -205,6 +205,7 @@ def rag_index(sb_root):
     return model
 
 
+@pytest.mark.rag
 def test_rag_query_route(api_server, rag_index):
     # POST 检索：运放问题应命中运放笔记（首次请求含模型加载，放宽超时）
     body = api_post(f"{api_server}/rag/query", {"q": "运放虚短虚断是什么", "top_k": 3}, timeout=120)
@@ -215,6 +216,7 @@ def test_rag_query_route(api_server, rag_index):
     assert "snippet" in items[0]
 
 
+@pytest.mark.rag
 def test_rag_query_get(api_server, rag_index):
     # GET 检索：subject 过滤（首次加载后模型已常驻，放宽超时兜底）
     from urllib.parse import quote
@@ -227,6 +229,7 @@ def test_rag_query_get(api_server, rag_index):
     assert items[0]["subject"] == "高数"
 
 
+@pytest.mark.rag
 def test_rag_query_empty(api_server, rag_index):
     # 空 q 返回错误而非崩溃
     body = api_post(f"{api_server}/rag/query", {"q": "  "})

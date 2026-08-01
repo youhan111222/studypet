@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db } from '../db';
+import { errMsg } from '../utils';
 import type { SubjectKey } from '../types';
 
 const SUBJECTS: { key: SubjectKey; name: string; color: string }[] = [
@@ -42,8 +43,8 @@ export function StatsPanel() {
         const aCount = await db.attempts.count();
         setTotalQuestions(qCount);
         setTotalAttempts(aCount);
-      } catch (e: any) {
-        setError(e?.message || '加载数据失败');
+      } catch (e) {
+        setError(errMsg(e, '加载数据失败'));
       }
     })();
   }, []);

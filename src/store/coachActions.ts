@@ -1,5 +1,17 @@
 import { useStore } from './useStore';
 import { localToday } from '../utils';
+import type { Period, SubjectKey, SubjectProgress } from '../types';
+
+/** AI 教练 ACTION 指令负载（JSON 解析后的可选字段；AI 可能给错类型，取值处做防御） */
+interface CoachActionPayload {
+  title?: string; content?: string; priority?: string; remindAt?: string; time?: string;
+  period?: string; duration?: number; tags?: string[]; deadline?: string;
+  name?: string; day?: number; timeStart?: string; timeEnd?: string; location?: string;
+  courseName?: string; subject?: string; chapter?: string; mastery?: string;
+  score?: unknown; totalScore?: unknown; examType?: string; examDate?: string; notes?: string;
+  id?: string; type?: string; items?: string[]; chapterName?: string;
+  checklistUsed?: string; result?: string; nextAction?: string;
+}
 
 /**
  * 解析教练回复中的 [ACTION:xxx] 指令并执行。
@@ -20,8 +32,8 @@ export function executeCoachActions(content: string): { cleanContent: string; su
   let match;
   while ((match = actionRegex.exec(content)) !== null) {
     const actionName = match[1];
-    let payload: any;
-    try { payload = JSON.parse(match[2]); } catch { continue; }
+    let payload: CoachActionPayload;
+    try { payload = JSON.parse(match[2]) as CoachActionPayload; } catch { continue; }
     switch (actionName) {
       case 'add_task': {
         const title = payload.title || '新任务';
@@ -41,7 +53,7 @@ export function executeCoachActions(content: string): { cleanContent: string; su
         const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         addTask({
           id, title,
-          period: payload.period || 'morning', time: payload.time || '',
+          period: (payload.period as Period) || 'morning', time: payload.time || '',
           duration: payload.duration || 0, tags: payload.tags || [],
           completed: false, source: 'coach',
           deadline: payload.deadline, pomodoroCount: 0,
@@ -50,13 +62,13 @@ export function executeCoachActions(content: string): { cleanContent: string; su
         break;
       }
       case 'complete_task': {
-        const t = tasks.find(t => !t.completed && t.title.includes(payload.title));
+        const t = tasks.find(t => !t.completed && t.title.includes(payload.title || ''));
         if (t) { toggleTask(t.id); results.push(`已完成任务「${t.title}」`); }
         else results.push(`未找到可完成的任务「${payload.title}」`);
         break;
       }
       case 'delete_task': {
-        const t = tasks.find(t => t.title.includes(payload.title));
+        const t = tasks.find(t => t.title.includes(payload.title || ''));
         if (t) { deleteTask(t.id); results.push(`已删除任务「${t.title}」`); }
         else results.push(`未找到任务「${payload.title}」`);
         break;
@@ -81,13 +93,13 @@ export function executeCoachActions(content: string): { cleanContent: string; su
         break;
       }
       case 'complete_important': {
-        const item = importantItems.find(i => !i.done && i.title.includes(payload.title));
+        const item = importantItems.find(i => !i.done && i.title.includes(payload.title || ''));
         if (item) { toggleImportant(item.id); results.push(`已完成重要事项「${item.title}」`); }
         else results.push(`未找到可完成的事项「${payload.title}」`);
         break;
       }
       case 'delete_important': {
-        const item = importantItems.find(i => i.title.includes(payload.title));
+        const item = importantItems.find(i => i.title.includes(payload.title || ''));
         if (item) { deleteImportant(item.id); results.push(`已删除重要事项「${item.title}」`); }
         else results.push(`未找到事项「${payload.title}」`);
         break;
@@ -121,25 +133,25 @@ export function executeCoachActions(content: string): { cleanContent: string; su
         break;
       }
       case 'update_subject_progress': {
-        updateSubjectProgress(payload.subject, payload);
+        updateSubjectProgress(payload.subject as SubjectKey, payload as unknown as Partial<SubjectProgress>);
         results.push(`已更新${payload.subject}学习进度`);
         break;
       }
       case 'add_exam': {
         addExamRecord({
           id: payload.id || `e-${Date.now()}`,
-          subject: payload.subject,
-          score: payload.score,
-          totalScore: payload.totalScore,
+          subject: payload.subject as SubjectKey,
+          score: Number(payload.score) || 0,          // AI 可能发字符串分数
+          totalScore: Number(payload.totalScore) || 0,
           examType: payload.examType || '章节测试',
-          examDate: payload.examDate,
+          examDate: payload.examDate || '',
           notes: payload.notes || '',
         });
         results.push(`已记录${payload.subject}考试: ${payload.score}/${payload.totalScore}`);
         break;
       }
       case 'chapter_mastery': {
-        updateChapterMastery(payload.subject, payload.chapter, payload.mastery);
+        updateChapterMastery(payload.subject as SubjectKey, payload.chapter || '', payload.mastery as never);
         results.push(`已更新「${payload.chapter}」掌握状态为 ${payload.mastery}`);
         break;
       }
@@ -150,7 +162,7 @@ export function executeCoachActions(content: string): { cleanContent: string; su
           type: payload.type === 'verify' ? 'verify' : 'execute',
           items: payload.items || [],
           chapterName: payload.chapterName,
-          subject: payload.subject,
+          subject: payload.subject as SubjectKey,
         });
         results.push(`已创建${payload.type === 'verify' ? '核查' : '执行'}清单「${payload.title}」`);
         break;
@@ -159,7 +171,7 @@ export function executeCoachActions(content: string): { cleanContent: string; su
         addPracticeLog({
           id: `pl-${Date.now()}`,
           date: localToday(),
-          subject: payload.subject,
+          subject: payload.subject as SubjectKey,
           chapter: payload.chapter || '',
           checklistUsed: payload.checklistUsed || '',
           result: payload.result || '',

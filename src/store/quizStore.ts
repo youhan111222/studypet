@@ -117,8 +117,9 @@ function tfValue(s: string): string {
 export function judgeAnswer(q: Question, selected: string): boolean {
   if (!selected) return false;
   if (q.type === 'multiple') {
-    const a = selected.replace(/\s+/g, '').split('').sort().join('').toUpperCase();
-    const b = (q.answer || '').replace(/\s+/g, '').split('').sort().join('').toUpperCase();
+    // 只比对字母：兼容 "A,C,D" / "A C D" / "CAD" 等用户输入形式
+    const a = selected.replace(/[^A-Za-z]/g, '').toUpperCase().split('').sort().join('');
+    const b = (q.answer || '').replace(/[^A-Za-z]/g, '').toUpperCase().split('').sort().join('');
     return a.length > 0 && a === b;
   }
   if (q.type === 'truefalse') {

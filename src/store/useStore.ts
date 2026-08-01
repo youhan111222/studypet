@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { inferSubjectFromTitle, localDateStr, localToday } from '../utils';
+import { inferSubjectFromTitle, localDateStr, localToday, parseDate } from '../utils';
 import type { Task, Pet, Achievement, ChatMessage, ChatSession, WeekStats, ScheduleItem, ActivityLog, ImportantItem, SubjectProgress, SubjectKey, ExamRecord, MasteryLevel, StudyChecklist, PracticeLog } from '../types';
 // 课表数据来自权威课表（XLS 解析），不再内置 seed
 
@@ -120,7 +120,7 @@ function computeStateAchievements(state: Store, streak: number): Achievement[] {
 // ====== 连胜计算（公共）======
 // 某天算"打卡" = 该天有完成任务 **或** 该天学习时长 ≥ 30 分钟（studyDays）
 // 从今天往回数连续打卡的天数，每天最多 +1
-function computeStreak(tasks: Task[], studyDays: Record<string, number>, today: string): number {
+export function computeStreak(tasks: Task[], studyDays: Record<string, number>, today: string): number {
   const checkinDates = new Set<string>();
   tasks.forEach(t => {
     if (t.completed) checkinDates.add(t.date || today);
@@ -129,7 +129,7 @@ function computeStreak(tasks: Task[], studyDays: Record<string, number>, today: 
     if (minutes >= 30) checkinDates.add(date);
   });
   let streak = 0;
-  const now = new Date();
+  const now = parseDate(today); // 以传入日期为锚点（可测试、确定性强）
   for (let i = 0; i < 365; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);

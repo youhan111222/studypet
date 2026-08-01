@@ -1,0 +1,43 @@
+﻿name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  quality-gates:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Python deps
+        run: pip install requests ruff pytest
+
+      - name: Node deps
+        run: npm ci
+
+      - name: Lint (ruff)
+        run: python -m ruff check .
+
+      - name: Python tests (skip RAG: needs local sentence-transformers model)
+        run: python -m pytest -q -m "not rag"
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Frontend unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build

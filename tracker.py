@@ -41,7 +41,8 @@ def safe_print(obj):
     except (BrokenPipeError, OSError):
         pass  # stdout 断开时静默忽略
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "activity.db")
+# 测试可通过 STUDYPET_DB_PATH 指向临时库，避免污染真实 activity.db
+DB_PATH = os.environ.get("STUDYPET_DB_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), "activity.db"))
 
 # 单实例锁：防止多个 tracker 重复写库（旧进程残留会双写记录）
 LOCK_FILE = os.path.join(os.path.dirname(DB_PATH), "tracker.lock")

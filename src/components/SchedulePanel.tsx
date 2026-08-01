@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { SEMESTER_START, getCurrentWeek } from '../config';
+import { errMsg } from '../utils';
 import { isWeekInRange } from '../utils';
 import type { ScheduleItem } from '../types';
 
@@ -69,12 +70,17 @@ export function SchedulePanel() {
   };
 
   const parseJSON = (text: string): ScheduleItem[] => {
+    interface ImportedCourse {
+      name?: string; course?: string; day?: unknown; weekday?: unknown;
+      timeStart?: string; start?: string; timeEnd?: string; end?: string;
+      location?: string; classroom?: string; teacher?: string; weeks?: string;
+    }
     const data = JSON.parse(text);
     const arr = Array.isArray(data) ? data : (data.schedule || data.courses || []);
-    return arr.map((item: any, i: number) => ({
+    return (arr as ImportedCourse[]).map((item, i) => ({
       id: `json-${Date.now()}-${i}`,
       name: item.name || item.course || '',
-      day: item.day || item.weekday || 1,
+      day: Number(item.day || item.weekday || 1) || 1, // 兼容字符串 "3"
       timeStart: item.timeStart || item.start || '08:00',
       timeEnd: item.timeEnd || item.end || '09:40',
       location: item.location || item.classroom || '',
@@ -86,7 +92,7 @@ export function SchedulePanel() {
   const parseICS = (text: string): ScheduleItem[] => {
     const lines = text.split('\n');
     const items: ScheduleItem[] = [];
-    let current: any = {};
+    let current: Record<string, string> = {};
     let inEvent = false;
 
     let inAlarm = false;
@@ -167,8 +173,8 @@ export function SchedulePanel() {
       clearSchedule();
       importSchedule(items);
       setImportMsg(`成功导入 ${items.length} 门课程`);
-    } catch (e: any) {
-      setImportMsg(`导入失败：${e.message}`);
+    } catch (e) {
+      setImportMsg(`导入失败：${errMsg(e)}`);
     }
     setImporting(false);
     if (fileRef.current) fileRef.current.value = '';
@@ -186,8 +192,8 @@ export function SchedulePanel() {
       if (items.length === 0) throw new Error('未解析到课程数据');
       importSchedule(items);
       setImportMsg(`已导入 ${items.length} 条课表`);
-    } catch (e: any) {
-      alert(`官方课表导入失败：${e.message}`);
+    } catch (e) {
+      alert(`官方课表导入失败：${errMsg(e)}`);
     } finally {
       setXlsImporting(false);
     }

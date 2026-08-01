@@ -1,3 +1,10 @@
+/** 从未知异常提取可读信息（strict 下 catch(e) 是 unknown，统一入口） */
+export function errMsg(e: unknown, fallback = '未知错误'): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'string') return e;
+  return fallback;
+}
+
 /** 本地时区 YYYY-MM-DD（toISOString 是 UTC，凌晨 0-8 点会错一天，本地日期一律走这里） */
 export function localToday(): string {
   return localDateStr(new Date());

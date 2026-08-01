@@ -19,7 +19,7 @@ React + TypeScript + Zustand 前端项目，宠兽养成×学习管理。本地�
 
 ### 前端规范
 - 宽度调整组件严格限制在 380px-700px 之间
-- 禁止使用硬编码的 `style={{}}`，必须用 Tailwind CSS class
+- 禁止静态硬编码 `style={{}}`（必须用 Tailwind class）；仅允许数据驱动的动态值（宽度百分比/动态颜色/动画延迟）
 - 所有 API 调用走 Vite 代理，禁止直接写 `http://127.0.0.1:19998` 在前端代码里
 - Zustand store 的 persist 只保留最近 30 天数据
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
-import type { WeekStats } from './types';
+import type { ActivityLog, WeekStats } from './types';
 import { Sidebar } from './components/Sidebar';
 import { CoachPanel } from './components/CoachPanel';
 import { StudyTimer } from './components/StudyTimer';
@@ -18,6 +18,9 @@ import { ScreenTimePanel } from './components/ScreenTimePanel';
 import { ReminderHost } from './hooks/useReminders';
 import { API } from './config';
 import { localDateStr, localToday } from './utils';
+
+interface StatsApp { appName: string; category: string; duration: number; }
+interface StatsResponse { apps?: StatsApp[]; effectiveStudyMinutes?: number; totalActiveMinutes?: number; }
 
 export default function App() {
   const sessions = useStore(s => s.sessions);
@@ -63,17 +66,17 @@ export default function App() {
   const syncLoop = useCallback(async () => {
     try {
       const res = await fetch(`${API}/activity/stats`);
-      const data = await res.json();
+      const data = await res.json() as StatsResponse;
       if (data?.apps || data?.totalActiveMinutes !== undefined) {
         if (trackerStatusRef.current !== 'online') setTrackerStatus('online');
         const today = localToday();
-        const mapped = (data.apps || []).map((r: any) => ({
-          id: `real-${r.appName}-${r.category}`, appName: r.appName, category: r.category,
+        const mapped = (data.apps || []).map((r: StatsApp) => ({
+          id: `real-${r.appName}-${r.category}`, appName: r.appName, category: r.category as ActivityLog['category'],
           startTime: '', duration: r.duration, date: today,
         }));
         syncActivityLogs(mapped);
         const studyMinutes = data.effectiveStudyMinutes ?? (
-          (data.apps || []).filter((a: any) => a.category === 'study').reduce((s: number, a: any) => s + a.duration, 0)
+          (data.apps || []).filter((a: StatsApp) => a.category === 'study').reduce((s: number, a: StatsApp) => s + a.duration, 0)
         );
         // 学习时长纳入连胜判定（每天 ≥30 分钟有效学习也算打卡）
         useStore.getState().recordStudyMinutes(today, studyMinutes);

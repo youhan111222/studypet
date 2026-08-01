@@ -6,7 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:py": "python -m pytest -q -m \"not rag\"",
+    "test:py:full": "python -m pytest -q",
+    "lint": "python -m ruff check .",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run test:py && npm run build"
   },
   "dependencies": {
     "dexie": "^4.4.4",
@@ -20,10 +27,13 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.5.4",
+    "jsdom": "^30.0.1",
     "postcss": "^8.5.25",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.5.3",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "vitest": "^4.1.10"
   }
 }

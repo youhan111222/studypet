@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore';
 import { useMemoryStore } from '../store/memory';
 import { analyzeState } from '../store/stateAnalyzer';
 import { executeCoachActions } from '../store/coachActions';
-import { isWeekInRange, localDateStr, localToday, parseDate } from '../utils';
+import { errMsg, isWeekInRange, localDateStr, localToday, parseDate } from '../utils';
 import type { ChatMessage, SubjectKey, SubjectProgress } from '../types';
 import { API, EXAM_DATE, SEMESTER_START, getCurrentWeek } from '../config';
 import { fetchReviewDue, getSecondBrainState, describeReviewDue, subjectName } from '../lib/secondbrain';
@@ -325,15 +325,15 @@ export function CoachPanel() {
       subjectLines.push(`  ${subjectNames[key]}(${key === 'electronics' ? 200 : 100}分): ${sp.totalMinutes}min | 进度:${sp.currentChapter} | 完成${sp.completedChapters.length}章 | ${gapWarning}${sp.notes ? ' | 备注:' + sp.notes : ''}`);
       // 章节掌握状态（只输出非 mastered 的章节）
       const cd = sp.chapterDetails || [];
-      const weakChapters = cd.filter((c: any) => c.mastery !== 'mastered');
+      const weakChapters = cd.filter(c => c.mastery !== 'mastered');
       if (weakChapters.length > 0) {
         const mMap: Record<string, string> = { not_started: '未开始', learning: '学习中', review_needed: '需复习' };
-        subjectLines.push(`    薄弱章节: ${weakChapters.map((c: any) => `${c.name}(${mMap[c.mastery] || c.mastery})`).join(', ')}`);
+        subjectLines.push(`    薄弱章节: ${weakChapters.map(c => `${c.name}(${mMap[c.mastery] || c.mastery})`).join(', ')}`);
         // 到期需复习的章节
         const todayStr2 = localToday();
-        const dueReview = cd.filter((c: any) => c.nextReviewDate && c.nextReviewDate <= todayStr2 && c.mastery !== 'mastered');
+        const dueReview = cd.filter(c => c.nextReviewDate && c.nextReviewDate <= todayStr2 && c.mastery !== 'mastered');
         if (dueReview.length > 0) {
-          subjectLines.push(`    ⏰ 到期待复习: ${dueReview.map((c: any) => c.name).join(', ')}`);
+          subjectLines.push(`    ⏰ 到期待复习: ${dueReview.map(c => c.name).join(', ')}`);
         }
       }
     });
@@ -664,8 +664,8 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       if (voiceOn && cleanContent) {
         speak(cleanContent);
       }
-    } catch (e: any) {
-      addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: `网络错误：${e.message}。请检查 API 服务是否启动。` });
+    } catch (e) {
+      addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: `网络错误：${errMsg(e)}。请检查 API 服务是否启动。` });
     }
     setLoading(false);
   }, [loading, activeSessionDate, addMessage, voiceOn, speak]);
@@ -708,8 +708,8 @@ ${ratioAlert ? '\n' + ratioAlert : ''}${ddlConflict ? '\n⚠️ DDL冲突：多�
       if (voiceOn && cleanContent) {
         speak(cleanContent);
       }
-    } catch (e: any) {
-      addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: `错误：${e.message}` });
+    } catch (e) {
+      addMessage(date, { id: `c-${Date.now()}`, role: 'coach', content: `错误：${errMsg(e)}` });
     }
     setLoading(false);
   };
