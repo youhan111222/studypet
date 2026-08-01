@@ -22,7 +22,7 @@ jobs:
           cache: npm
 
       - name: Python deps
-        run: pip install requests ruff pytest
+        run: pip install requests ruff==0.16.1 pytest
 
       - name: Node deps
         run: npm ci

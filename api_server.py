@@ -1,24 +1,40 @@
 import http.server
 import json
-import sqlite3
 import os
+import socketserver
+import sqlite3
 import sys
 import urllib.parse
-import socketserver
-import requests as req_lib
 from datetime import datetime, timedelta
+
+import requests as req_lib
 
 # ===== 按职责拆分的模块（本文件只保留路由与编排） =====
 from coach_prompt import build_system_prompt
 from rag_service import rag_query
-from schedule_xls import parse_official_schedule_xls
 from sb_integration import (
-    CHECKED_MARK, DIARY_DIR, MISTAKES_DIR, MISTAKE_SUBJECT_ALLOW, STATE_PATH, TRACKER_HEADER, TRACKER_PATH,
+    CHECKED_MARK,
+    DIARY_DIR,
+    MISTAKE_SUBJECT_ALLOW,
+    MISTAKES_DIR,
+    STATE_PATH,
+    TRACKER_HEADER,
     TRACKER_INTERVALS,
-    UNCHECKED_MARK, _sb_atomic_write, _sb_mistake_frontmatter, _sb_mistake_section, _sb_parse_date,
-    _sb_parse_mistake_file, _sb_parse_tracker, _sb_read_state, _sb_read_text, _sb_resolve_subject_dir,
-    _sb_safe_filename, _sb_tracker_due_items,
+    TRACKER_PATH,
+    UNCHECKED_MARK,
+    _sb_atomic_write,
+    _sb_mistake_frontmatter,
+    _sb_mistake_section,
+    _sb_parse_date,
+    _sb_parse_mistake_file,
+    _sb_parse_tracker,
+    _sb_read_state,
+    _sb_read_text,
+    _sb_resolve_subject_dir,
+    _sb_safe_filename,
+    _sb_tracker_due_items,
 )
+from schedule_xls import parse_official_schedule_xls
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "activity.db")
@@ -44,7 +60,7 @@ def _load_env():
                     if line and not line.startswith("#") and "=" in line:
                         k, v = line.split("=", 1)
                         os.environ.setdefault(k.strip(), v.strip())
-        except Exception:
+        except (OSError, ValueError):  # .env 缺失或格式错误时静默跳过
             pass
 
 
@@ -54,7 +70,8 @@ def get_api_key():
     if env_key:
         return env_key
     if os.path.exists(DEEPSEEK_KEY_FILE):
-        key = open(DEEPSEEK_KEY_FILE, encoding="utf-8-sig").read().strip()
+        with open(DEEPSEEK_KEY_FILE, encoding="utf-8-sig") as f:
+            key = f.read().strip()
         if not key.startswith("sk-"):
             # 占位/无效 key：视为未配置，避免静默 401
             print("[warn] api_key.txt 内容不是有效的 sk- key，已忽略，请在设置中重新配置", file=sys.stderr)
@@ -80,7 +97,7 @@ def load_study_keywords():
     try:
         with open(KEYWORDS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {}
 
 # 启动时加载，后续每次请求重新读取以支持热更新
@@ -172,7 +189,7 @@ def duckduckgo_search(query: str, max_results: int = 5):
         parser = ResultParser()
         parser.feed(resp.text)
         return parser.results[:max_results]
-    except Exception:
+    except Exception:  # noqa: BLE001 - 搜索边界兜底：任何失败都返回占位结果
         return [{"title": "搜索失败，请稍后重试", "url": "", "snippet": ""}]
 
 class APIHandler(http.server.BaseHTTPRequestHandler):
@@ -212,7 +229,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 
         try:
             if parsed.path == "/patina/history":
-                since = datetime.now() - timedelta(days=days)
+                since = datetime.now().astimezone() - timedelta(days=days)
                 ts = int(since.timestamp() * 1000)
                 rows = conn.execute(
                     "SELECT app_name, exe_name, window_title, duration, datetime(start_time/1000,'unixepoch','localtime') as dt FROM sessions WHERE start_time>=?", (ts,)
@@ -245,7 +262,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         finally:
             try:
                 conn.close()
-            except Exception:
+            except sqlite3.Error:
                 pass
 
     # ===== SecondBrain 路由（GET） =====
@@ -260,7 +277,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "复习追踪器读取失败"}).encode())
             return
         _cols, rows = _sb_parse_tracker(text)
-        items = _sb_tracker_due_items(rows, datetime.now().date())
+        items = _sb_tracker_due_items(rows, datetime.now().astimezone().date())
         self.wfile.write(json.dumps({"items": items}, ensure_ascii=False).encode())
 
     def _sb_mistakes_get(self, parsed):
@@ -281,7 +298,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         if not os.path.isdir(dir_path):
             self.wfile.write(json.dumps({"items": []}).encode())
             return
-        cutoff = datetime.now().date() - timedelta(days=days)
+        cutoff = datetime.now().astimezone().date() - timedelta(days=days)
         items = []
         try:
             fnames = sorted(os.listdir(dir_path), reverse=True)
@@ -346,7 +363,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._respond({"error": "知识点不匹配"})
             return
         study = _sb_parse_date(target["lastStudyDate"])
-        today = datetime.now().date()
+        today = datetime.now().astimezone().date()
         lines = text.splitlines()
         parts = lines[target["line_no"]].split("|")
         checked_iv = None
@@ -384,7 +401,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                   "高数": "高数", "高等数学": "高数", "数学": "高数",
                   "英语": "英语", "政治": "政治"}
         subject = cn_map.get(subject, subject)
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now().astimezone().strftime("%Y-%m-%d")
         row = f"| {today} | {point} | {subject} | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |"
         try:
             if os.path.exists(TRACKER_PATH):
@@ -407,7 +424,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         if subject not in MISTAKE_SUBJECT_ALLOW:
             self._respond({"error": "subject 参数不合法"})
             return
-        date = str(data.get("date", "")).strip() or datetime.now().strftime("%Y-%m-%d")
+        date = str(data.get("date", "")).strip() or datetime.now().astimezone().strftime("%Y-%m-%d")
         if _sb_parse_date(date) is None:
             self._respond({"error": "date 格式应为 YYYY-MM-DD"})
             return
@@ -478,17 +495,17 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             self._dispatch_get()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - 请求边界兜底，统一转 500
             import traceback
             err_msg = f"GET {self.path}: {e}\n{traceback.format_exc()}"
             try:
                 with open(os.path.join(os.path.dirname(__file__), "api_error.log"), "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now()}] {err_msg}\n\n")
-            except Exception:
+                    f.write(f"[{datetime.now().astimezone()}] {err_msg}\n\n")
+            except OSError:
                 pass
             try:
                 self.wfile.write(json.dumps({"error": "服务器内部错误"}).encode())
-            except Exception:
+            except OSError:
                 pass
 
     def _dispatch_get(self):
@@ -506,7 +523,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/activity/stats":
-            today = datetime.now().strftime("%Y-%m-%d")
+            today = datetime.now().astimezone().strftime("%Y-%m-%d")
             if os.path.exists(DB_PATH):
                 conn = get_db()
                 try:
@@ -643,7 +660,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 days = max(1, min(int(params.get("days", ["7"])[0]), 365))
             except ValueError:
                 days = 7
-            cutoff = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+            cutoff = (datetime.now().astimezone() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
             if os.path.exists(DB_PATH):
                 conn = get_db()
                 try:
@@ -705,21 +722,21 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode() if length > 0 else "{}"
-        except Exception:
+        except (OSError, ValueError):  # 读请求体失败按空 body 处理
             body = "{}"
 
         parsed = urllib.parse.urlparse(self.path)
 
         try:
             self._handle_post(parsed, body)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - 请求边界兜底，统一转 500
             import traceback
             err_msg = f"Server error: {e}\n{traceback.format_exc()}"
             # Log to file
             try:
                 with open(os.path.join(os.path.dirname(__file__), "api_error.log"), "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now()}] {parsed.path}\n{err_msg}\n\n")
-            except Exception:
+                    f.write(f"[{datetime.now().astimezone()}] {parsed.path}\n{err_msg}\n\n")
+            except OSError:
                 pass
             try:
                 self.send_response(500)
@@ -729,7 +746,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "服务器内部错误", "success": False}).encode())
-            except Exception:
+            except OSError:
                 pass
 
     def _respond(self, data):
@@ -797,7 +814,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 content = result["choices"][0]["message"]["content"]
                 try:
                     q = json.loads(content)
-                except Exception:
+                except (json.JSONDecodeError, TypeError):
                     self._respond({"error": "出题结果解析失败，请重试"})
                     return
                 if not q.get("stem") or not q.get("options") or not q.get("answer"):
@@ -810,7 +827,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                     "analysis": q.get("analysis", ""),
                     "tags": q.get("tags", []),
                 })
-            except Exception:
+            except Exception:  # noqa: BLE001 - API 边界兜底，统一返回错误
                 self._respond({"error": "服务器内部错误"})
 
         elif parsed.path == "/api/coach/chat":
@@ -858,7 +875,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 result = resp.json()
                 content = result["choices"][0]["message"]["content"]
                 self._respond({"response": content, "success": True})
-            except Exception:
+            except Exception:  # noqa: BLE001 - API 边界兜底，统一返回错误
                 self._respond({"error": "服务器内部错误", "success": False})
 
         elif parsed.path == "/secondbrain/review-check":
@@ -914,7 +931,7 @@ if __name__ == "__main__":
         conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_date_category ON activity(date, category)")
         conn.commit()
         conn.close()
-    except Exception:
+    except sqlite3.Error:
         pass
     try:
         server = ThreadingHTTPServer(("127.0.0.1", port), APIHandler)

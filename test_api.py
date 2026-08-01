@@ -78,7 +78,7 @@ def api_server(sb_root):
         try:
             urllib.request.urlopen(f"{BASE_URL}/health", timeout=1)
             break
-        except Exception:
+        except OSError:  # URLError 继承自 OSError，覆盖连接失败
             time.sleep(0.25)
     else:
         proc.kill()
@@ -187,7 +187,7 @@ def rag_index(sb_root):
     client = chromadb.PersistentClient(str(idx_dir))
     try:
         client.delete_collection("secondbrain")
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 - 集合不存在时忽略
         pass
     col = client.create_collection("secondbrain")
     docs = [
@@ -240,7 +240,7 @@ def test_rag_query_empty(api_server, rag_index):
 
 def test_secondbrain_review_due(api_server, sb_root):
     # 3 行：1 个今天到期未勾、1 个全部已勾、1 个未来 → 只返回到期项
-    today = datetime.now().date()
+    today = datetime.now().astimezone().date()
     d_due = (today - timedelta(days=1)).strftime("%Y-%m-%d")
     d_old = (today - timedelta(days=30)).strftime("%Y-%m-%d")
     d_future = (today + timedelta(days=10)).strftime("%Y-%m-%d")
@@ -265,7 +265,7 @@ def test_secondbrain_review_due(api_server, sb_root):
 
 def test_secondbrain_review_check(api_server, sb_root):
     # 勾选后文件内容 ⬜ → ✅（整行替换，表头保留）
-    today = datetime.now().date()
+    today = datetime.now().astimezone().date()
     d_due = (today - timedelta(days=1)).strftime("%Y-%m-%d")
     p = write_tracker(sb_root, [
         f"| {d_due} | 函数极限 | 高数 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |",
@@ -277,7 +277,7 @@ def test_secondbrain_review_check(api_server, sb_root):
     assert body.get("ok") is True
     content = p.read_text(encoding="utf-8")
     assert "| 学习日期 | 知识点 | 科目 |" in content  # 表头未动
-    row = [ln for ln in content.splitlines() if ln.startswith("| 20")][0]
+    row = next(ln for ln in content.splitlines() if ln.startswith("| 20"))
     cells = [c.strip() for c in row.strip("|").split("|")]
     assert cells[3] == "✅"   # ①1天 已勾
     assert cells[4] == "⬜"   # ②2天 未动
@@ -292,7 +292,7 @@ def test_secondbrain_review_check(api_server, sb_root):
 
 def test_secondbrain_mistakes_write(api_server, sb_root):
     # 写入后文件存在、内容含题目；科目英文 key 映射为中文目录
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().astimezone().strftime("%Y-%m-%d")
     body = api_post(f"{api_server}/secondbrain/mistakes", {
         "subject": "electronics",
         "chapter": "运算放大器",
@@ -314,7 +314,7 @@ def test_secondbrain_mistakes_write(api_server, sb_root):
 
 def test_secondbrain_diary_create_append(api_server, sb_root):
     # 新日期创建、同日期追加
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().astimezone().strftime("%Y-%m-%d")
     body = api_post(f"{api_server}/secondbrain/diary", {"date": today, "content": "## 军立状\n今天学电子"})
     assert body.get("ok") is True
     f = sb_root / "20-日记" / f"{today}.md"
@@ -334,7 +334,7 @@ def test_secondbrain_diary_create_append(api_server, sb_root):
 
 def test_secondbrain_parse_robust(api_server, sb_root):
     # 损坏行（列数不足/日期非法/科目为空）跳过不崩，id 按有效数据行连续编号
-    today = datetime.now().date()
+    today = datetime.now().astimezone().date()
     d_due = (today - timedelta(days=1)).strftime("%Y-%m-%d")
     write_tracker(sb_root, [
         f"| {d_due} | 有效点 | 高数 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |",

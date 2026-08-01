@@ -59,7 +59,7 @@ def parse_official_schedule_xls():
                 v = sh.cell_value(r, c)
                 row.append("" if v in ("", None) else str(v))
             rows.append(row)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - 课表解析失败降级为空（docstring 契约）
         print(f"[schedule] XLS 解析失败: {e}", file=sys.stderr)
         return []
 

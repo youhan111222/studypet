@@ -24,8 +24,8 @@ def _rag_load():
             return None
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
         os.environ["HF_HUB_OFFLINE"] = "1"
-        from sentence_transformers import SentenceTransformer
         import chromadb
+        from sentence_transformers import SentenceTransformer
         _RAG_MODEL = SentenceTransformer('BAAI/bge-small-zh-v1.5')
         client = chromadb.PersistentClient(str(RAG_INDEX_DIR))
         _RAG_COLLECTION = client.get_collection("secondbrain")
@@ -55,6 +55,6 @@ def rag_query(q, subject="", top_k=3):
                 "snippet": (doc or "")[:300],
             })
         return items
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - RAG 失败静默降级：查询失败返回空列表
         print(f"[rag] query failed: {e}", file=sys.stderr)
         return []

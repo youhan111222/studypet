@@ -15,14 +15,14 @@ def _load_knowledge_base():
     try:
         with open(pdf_file, "r", encoding="utf-8", errors="ignore") as f:
             raw = f.read()
-    except Exception:
+    except OSError:
         return ""
     clean_lines = []
     for line in raw.split("\n"):
         stripped = line.strip()
         if not stripped:
             continue
-        if stripped.startswith("===== PAGE") or stripped.startswith("@") or stripped.startswith("抓住"):
+        if stripped.startswith(("===== PAGE", "@", "抓住")):
             continue
         if len(stripped) < 5:
             continue
@@ -44,7 +44,7 @@ SUBJECT_KEY_MAP = {"电子技术": "electronics", "高等数学": "math", "高�
 
 def build_system_prompt(context: dict, user_message: str = "") -> str:
     """构建系统提示词 — 硬核教练版（context 为前端 POST 的 context 对象）"""
-    now = datetime.now()
+    now = datetime.now().astimezone()
     today = now.strftime("%Y-%m-%d")
     hour = now.hour
     period = "凌晨" if hour < 6 else "上午" if hour < 12 else "中午" if hour < 13 else "下午" if hour < 18 else "晚上"
@@ -70,7 +70,7 @@ def build_system_prompt(context: dict, user_message: str = "") -> str:
         last_date = sp.get("lastStudyDate", "")
         if last_date:
             try:
-                gap = (now - datetime.strptime(last_date, "%Y-%m-%d")).days
+                gap = (now - datetime.strptime(last_date, "%Y-%m-%d").replace(tzinfo=now.tzinfo)).days
                 gap_str = f" | 距上次复习{gap}天"
             except ValueError:
                 gap_str = ""
@@ -100,7 +100,7 @@ def build_system_prompt(context: dict, user_message: str = "") -> str:
                         score = v.get('total', v.get('perScore', ''))
                         parts.append(f'{k}({score}分)')
                     syllabus_text += '  题型: ' + ' | '.join(parts) + '\n'
-        except Exception:
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError):
             syllabus_text = "（考纲数据未加载）"
 
     knowledge_base = get_knowledge_base()

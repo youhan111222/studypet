@@ -1,5 +1,4 @@
-﻿# -*- coding: utf-8 -*-
-"""tracker.py 核心逻辑测试：长会话双写回归 / 空闲记录 / 分类器。
+﻿"""tracker.py 核心逻辑测试：长会话双写回归 / 空闲记录 / 分类器。
 
 导入前必须设置 STUDYPET_TEST_MODE=1 + STUDYPET_DB_PATH（临时库），
 模块级副作用（单实例锁/主循环）全部被测试开关屏蔽。
@@ -15,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ["STUDYPET_TEST_MODE"] = "1"
 os.environ.setdefault("STUDYPET_DB_PATH", os.path.join(tempfile.mkdtemp(), "t.db"))
 
-import tracker  # noqa: E402  （环境变量必须先于导入设置）
+import tracker
 
 
 @pytest.fixture()

@@ -6,17 +6,17 @@
 - 数据写入 SQLite
 """
 
-import sys
-import json
-import time
-import sqlite3
-import os
-import math
-import logging
-from collections import Counter
-from datetime import datetime
 import ctypes
+import json
+import logging
+import math
+import os
+import sqlite3
+import sys
+import time
+from collections import Counter
 from ctypes import wintypes
+from datetime import datetime
 
 # 强制使用 UTF-8 编码
 sys.stdout.reconfigure(encoding='utf-8') if hasattr(sys.stdout, 'reconfigure') else None
@@ -61,7 +61,7 @@ def _process_alive(pid):
             return bool(ok) and exit_code.value == 259  # STILL_ACTIVE
         finally:
             ctypes.windll.kernel32.CloseHandle(h)
-    except Exception:
+    except (OSError, AttributeError):
         return False
 
 
@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS activity (
 # 兼容旧表结构（无 is_idle 列）
 try:
     conn.execute("ALTER TABLE activity ADD COLUMN is_idle INTEGER DEFAULT 0")
-except Exception:
+except sqlite3.Error:  # 列已存在时忽略，兼容旧表
     pass
 conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_date ON activity(date)")
 conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_date_category ON activity(date, category)")
@@ -180,7 +180,7 @@ def get_active_window_info():
     """
     try:
         hwnd = user32.GetForegroundWindow()
-    except Exception:
+    except (OSError, AttributeError):
         return "Unknown", "unknown"
     if not hwnd:
         return "Unknown", "unknown"
@@ -206,7 +206,7 @@ def get_active_window_info():
                     title = "Unknown"
             else:
                 title = buf.value or "Unknown"
-    except Exception:
+    except (OSError, AttributeError):
         title = "Restricted Window"
 
     # 进程名 — 权限拒绝时分三级降级
@@ -243,7 +243,7 @@ def get_active_window_info():
                 proc = "protected" if err == 5 else "unknown"
         elif proc == "unknown":
             proc = "protected"
-    except Exception:
+    except (OSError, AttributeError):
         proc = "protected"
         return title, proc
     finally:
@@ -292,8 +292,7 @@ def get_idle_seconds():
     user32.GetLastInputInfo(ctypes.byref(lii))
     idle_sec = (kernel32.GetTickCount() - lii.dwTime) / 1000.0
     # GetTickCount 在 49.7 天后溢出，处理回绕
-    if idle_sec < 0:
-        idle_sec = 0  # 溢出时视为刚操作，忽略本次
+    idle_sec = max(idle_sec, 0)  # 溢出时视为刚操作，忽略本次
     return idle_sec
 
 
@@ -344,7 +343,7 @@ class AppClassifier:
     """基于 TF-IDF 向量 + 关键词得分的混合分类器"""
 
     def __init__(self):
-        self.categories = list(set(c for c, _ in CATEGORY_TRAINING))
+        self.categories = list({c for c, _ in CATEGORY_TRAINING})
         # 构建每个分类的 TF-IDF 特征向量
         self.category_vectors = {}  # cat -> {token: tfidf_score}
         self._build_index()
@@ -489,7 +488,7 @@ def _run_main_loop():
                 title, proc = get_active_window_info()
                 idle_sec = get_idle_seconds()
                 now = time.time()
-                date_str = datetime.now().strftime("%Y-%m-%d")
+                date_str = datetime.now().astimezone().strftime("%Y-%m-%d")
 
                 is_idle = idle_sec >= IDLE_THRESHOLD_SEC
 
@@ -500,7 +499,7 @@ def _run_main_loop():
                         cat = classify(last_title, last_proc)
                         _flush_segment(
                             last_title, last_proc, cat,
-                            datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                            datetime.fromtimestamp(last_start).astimezone().strftime("%Y-%m-%d %H:%M:%S"),
                             duration, date_str, label="空闲记录"
                         )
                         safe_print({
@@ -519,7 +518,7 @@ def _run_main_loop():
                         idle_duration = int(now - idle_start_time)
                         _write_activity(
                             ('空闲', 'idle', 'idle',
-                             datetime.fromtimestamp(idle_start_time).strftime("%Y-%m-%d %H:%M:%S"),
+                             datetime.fromtimestamp(idle_start_time).astimezone().strftime("%Y-%m-%d %H:%M:%S"),
                              idle_duration, date_str),
                             is_idle=1, label="空闲恢复记录"
                         )
@@ -537,7 +536,7 @@ def _run_main_loop():
                         cat = classify(last_title, last_proc)
                         _flush_segment(
                             last_title, last_proc, cat,
-                            datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
+                            datetime.fromtimestamp(last_start).astimezone().strftime("%Y-%m-%d %H:%M:%S"),
                             duration, date_str, label="窗口切换记录"
                         )
                         safe_print({
@@ -556,7 +555,7 @@ def _run_main_loop():
                 # 与结束段写入共用 _flush_segment（UPDATE-or-INSERT），杜绝长会话双写双计
                 if not is_idle and last_proc and not last_idle_logged and (now - last_start) >= 60:
                     dur = int(now - last_start)
-                    start_ts = datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S")
+                    start_ts = datetime.fromtimestamp(last_start).astimezone().strftime("%Y-%m-%d %H:%M:%S")
                     _flush_segment(last_title, last_proc, classify(last_title, last_proc),
                                    start_ts, dur, date_str, label="增量落盘")
 
@@ -564,8 +563,8 @@ def _run_main_loop():
 
             except KeyboardInterrupt:
                 raise  # 向外层抛出，走清理逻辑
-            except Exception as loop_err:
-                logger.error(f"循环内异常: {loop_err}", exc_info=True)
+            except Exception:
+                logger.exception("循环内异常")  # traceback 自带异常详情
                 time.sleep(2)
                 continue
 
@@ -577,8 +576,8 @@ def _run_main_loop():
             cat = classify(last_title, last_proc)
             if _flush_segment(
                 last_title, last_proc, cat,
-                datetime.fromtimestamp(last_start).strftime("%Y-%m-%d %H:%M:%S"),
-                duration, datetime.now().strftime("%Y-%m-%d"), label="最后活动记录"
+                datetime.fromtimestamp(last_start).astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+                duration, datetime.now().astimezone().strftime("%Y-%m-%d"), label="最后活动记录"
             ):
                 logger.info(f"保存最后活动: {last_proc} ({duration}s)")
         conn.close()

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """StudyPet → SecondBrain 每日同步引擎
 
 每晚 21:30 由计划任务调用（也可手动）：
@@ -22,11 +21,10 @@ import sqlite3
 import sys
 from datetime import date, datetime, timedelta
 
-try:
+if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
-except Exception:
-    pass
 
 ACTIVITY_DB = r"D:\StudyPet\activity.db"
 DEFAULT_SB_ROOT = r"D:\SecondBrain"
@@ -55,11 +53,11 @@ def log_entry(sb_root, msg):
     try:
         p = os.path.join(sb_root, RUNLOG_REL)
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
         with open(p, "a", encoding="utf-8") as f:
-            f.write("[%s] %s\n" % (ts, msg))
-    except Exception as e:
-        print("警告：写运行日志失败：%s" % e)
+            f.write(f"[{ts}] {msg}\n")
+    except OSError as e:
+        print(f"警告：写运行日志失败：{e}")
 
 
 def secs_to_min(secs):
@@ -80,8 +78,8 @@ def query_stats(db_path, date_str):
             rows = cur.fetchall()
         finally:
             conn.close()
-    except Exception as e:
-        print("错误：查询 activity.db 失败：%s" % e)
+    except (sqlite3.Error, OSError) as e:
+        print(f"错误：查询 activity.db 失败：{e}")
         return None
 
     categories = {}
@@ -106,12 +104,12 @@ def read_state(sb_root):
         with open(p, encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            raise ValueError("JSON 根不是对象")
+            raise TypeError("JSON 根不是对象")
         return data
     except FileNotFoundError:
         return {}
-    except Exception as e:
-        print("警告：读取 learning-state.md 失败（按空结构继续）：%s" % e)
+    except (OSError, json.JSONDecodeError, TypeError) as e:
+        print(f"警告：读取 learning-state.md 失败（按空结构继续）：{e}")
         return {}
 
 
@@ -134,8 +132,8 @@ def parse_due_items(tracker_path, tomorrow):
             lines = f.read().splitlines()
     except FileNotFoundError:
         return items
-    except Exception as e:
-        print("警告：读复习追踪器失败：%s" % e)
+    except OSError as e:
+        print(f"警告：读复习追踪器失败：{e}")
         return items
 
     for line in lines:
@@ -150,7 +148,7 @@ def parse_due_items(tracker_path, tomorrow):
         if all(re.fullmatch(r"-{1,}", c) or c == "" for c in cells):
             continue
         try:
-            ld = datetime.strptime(cells[0], "%Y-%m-%d").date()
+            ld = date.fromisoformat(cells[0])
         except ValueError:
             continue
         subject, point = cells[2], cells[1]
@@ -166,22 +164,22 @@ def parse_due_items(tracker_path, tomorrow):
 def build_diary_block(stats, due_items):
     """构造统计段 + 明日复习段。"""
     top3 = sorted(stats["categories"].items(), key=lambda kv: -kv[1])[:3]
-    parts = ["%s%d" % (CATEGORY_CN.get(c, c), m) for c, m in top3]
+    parts = [f"{CATEGORY_CN.get(c, c)}{m}" for c, m in top3]
     cat_line = " / ".join(parts) if parts else "无"
 
     lines = [
         SYNC_MARKER,
         "## 📊 今日学习统计（StudyPet 自动同步）",
-        "- 学习时长：%d 分钟" % stats["study_minutes"],
-        "- 总活跃：%d 分钟" % stats["total_minutes"],
-        "- 分类：%s" % cat_line,
-        "- 浏览器：%d 分钟" % stats["browser_minutes"],
+        f"- 学习时长：{stats['study_minutes']} 分钟",
+        f"- 总活跃：{stats['total_minutes']} 分钟",
+        f"- 分类：{cat_line}",
+        f"- 浏览器：{stats['browser_minutes']} 分钟",
         "",
         "## ⏰ 明日待复习（StudyPet 自动生成）",
     ]
     if due_items:
         for subject, point, n in due_items:
-            lines.append("- %s·%s：明天到期（第%d次复习）" % (subject, point, n))
+            lines.append(f"- {subject}·{point}：明天到期（第{n}次复习）")
     else:
         lines.append("- 无")
     return "\n".join(lines) + "\n"
@@ -189,7 +187,7 @@ def build_diary_block(stats, due_items):
 
 def write_diary(sb_root, date_str, stats, due_items):
     """创建/追加日记统计段。已有标记则跳过（幂等）。返回 'written' / 'skipped' / 'error'。"""
-    p = os.path.join(sb_root, DIARY_DIR, "%s.md" % date_str)
+    p = os.path.join(sb_root, DIARY_DIR, f"{date_str}.md")
     block = build_diary_block(stats, due_items)
     try:
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -200,13 +198,13 @@ def write_diary(sb_root, date_str, stats, due_items):
                 return "skipped"
             new_content = content.rstrip() + "\n\n" + block
         else:
-            weekday_cn = WEEKDAYS[datetime.strptime(date_str, "%Y-%m-%d").date().weekday()]
+            weekday_cn = WEEKDAYS[date.fromisoformat(date_str).weekday()]
             header = (
                 "---\n"
                 "tags: [daily]\n"
                 "type: daily\n"
                 "---\n"
-                "# %s 周%s\n\n" % (date_str, weekday_cn)
+                f"# {date_str} 周{weekday_cn}\n\n"
             )
             new_content = header + block
         tmp = p + ".tmp"
@@ -214,8 +212,8 @@ def write_diary(sb_root, date_str, stats, due_items):
             f.write(new_content)
         os.replace(tmp, p)
         return "written"
-    except Exception as e:
-        print("错误：写日记失败：%s" % e)
+    except (OSError, ValueError) as e:
+        print(f"错误：写日记失败：{e}")
         return "error"
 
 
@@ -223,25 +221,25 @@ def print_summary(date_str, stats, due_items, mode, sb_root):
     total = stats["total_minutes"]
     print("=" * 46)
     print("StudyPet → SecondBrain 同步引擎")
-    print("日期：%s（%s）" % (date_str, mode))
-    print("学习时长：%d 分钟" % stats["study_minutes"])
-    print("总活跃：%d 分钟" % total)
+    print(f"日期：{date_str}（{mode}）")
+    print(f"学习时长：{stats['study_minutes']} 分钟")
+    print(f"总活跃：{total} 分钟")
     top3 = sorted(stats["categories"].items(), key=lambda kv: -kv[1])[:3]
 
     def pct(m):
-        return "%.1f%%" % (m * 100.0 / total) if total else "-"
+        return f"{m * 100.0 / total:.1f}%" if total else "-"
 
-    print("分类 TOP3：%s" % " / ".join(
-        "%s %d 分钟 (%s)" % (CATEGORY_CN.get(c, c), m, pct(m)) for c, m in top3
-    ) or "无")
-    print("浏览器：%d 分钟" % stats["browser_minutes"])
+    print("分类 TOP3：{}".format(" / ".join(
+        f"{CATEGORY_CN.get(c, c)} {m} 分钟 ({pct(m)})" for c, m in top3
+    )) or "无")
+    print(f"浏览器：{stats['browser_minutes']} 分钟")
     print("明日待复习：")
     if due_items:
         for subject, point, n in due_items:
-            print("  - %s·%s：明天到期（第%d次复习）" % (subject, point, n))
+            print(f"  - {subject}·{point}：明天到期（第{n}次复习）")
     else:
         print("  - 无")
-    print("SecondBrain 根：%s" % sb_root)
+    print(f"SecondBrain 根：{sb_root}")
     print("=" * 46)
 
 
@@ -252,11 +250,11 @@ def main():
     parser.add_argument("--sb-root", default=None, help="覆盖 SecondBrain 根目录（测试用）")
     args = parser.parse_args()
 
-    date_str = args.date or date.today().isoformat()
+    date_str = args.date or datetime.now().astimezone().date().isoformat()
     try:
-        day = datetime.strptime(date_str, "%Y-%m-%d").date()
+        day = date.fromisoformat(date_str)
     except ValueError:
-        print("错误：日期格式无效：%s（应为 YYYY-MM-DD）" % date_str)
+        print(f"错误：日期格式无效：{date_str}（应为 YYYY-MM-DD）")
         return 1
     sb_root = args.sb_root or DEFAULT_SB_ROOT
     tomorrow = (day + timedelta(days=1)).isoformat()
@@ -265,7 +263,7 @@ def main():
     stats = query_stats(ACTIVITY_DB, date_str)
     if stats is None:
         if not args.dry_run:
-            log_entry(sb_root, "date=%s ERROR 查询 activity.db 失败" % date_str)
+            log_entry(sb_root, f"date={date_str} ERROR 查询 activity.db 失败")
         return 1
 
     due_items = parse_due_items(os.path.join(sb_root, TRACKER_REL), tomorrow)
@@ -289,29 +287,26 @@ def main():
         })
         p = write_state(sb_root, merged)
         state_ok = True
-        print("已更新 learning-state.md：%s" % p)
-    except Exception as e:
-        print("错误：更新 learning-state.md 失败：%s" % e)
-        log_entry(sb_root, "date=%s ERROR learning-state: %s" % (date_str, e))
+        print(f"已更新 learning-state.md：{p}")
+    except (OSError, json.JSONDecodeError, TypeError) as e:
+        print(f"错误：更新 learning-state.md 失败：{e}")
+        log_entry(sb_root, f"date={date_str} ERROR learning-state: {e}")
 
     # 3. 日记统计段
     result = write_diary(sb_root, date_str, stats, due_items)
     if result == "written":
-        print("已写入日记统计段：%s" % os.path.join(sb_root, DIARY_DIR, "%s.md" % date_str))
+        print("已写入日记统计段：{}".format(os.path.join(sb_root, DIARY_DIR, f"{date_str}.md")))
     elif result == "skipped":
         print("日记已有统计段，跳过（幂等）")
     else:
-        log_entry(sb_root, "date=%s ERROR 写日记失败" % date_str)
+        log_entry(sb_root, f"date={date_str} ERROR 写日记失败")
 
     log_entry(
         sb_root,
-        "date=%s mode=%s study=%dm total=%dm browser=%dm "
-        "state=%s diary=%s reminder=%d项"
-        % (
-            date_str, mode, stats["study_minutes"], stats["total_minutes"],
-            stats["browser_minutes"],
-            "ok" if state_ok else "fail", result, len(due_items),
-        ),
+        f"date={date_str} mode={mode} study={stats['study_minutes']}m "
+        f"total={stats['total_minutes']}m browser={stats['browser_minutes']}m "
+        f"state={'ok' if state_ok else 'fail'} diary={result} "
+        f"reminder={len(due_items)}项",
     )
     return 0
 

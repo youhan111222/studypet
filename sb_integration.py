@@ -5,7 +5,7 @@
 import json
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 # === SecondBrain 集成（复习追踪器 / 错题本 / 日记 / 学习状态） ===
 # 根目录可用环境变量 SECOND_BRAIN_ROOT 覆盖（测试用临时目录，不碰真实文件）
@@ -50,7 +50,7 @@ def _sb_parse_date(s):
     if not s:
         return None
     try:
-        return datetime.strptime(str(s).strip(), "%Y-%m-%d").date()
+        return date.fromisoformat(str(s).strip())
     except (ValueError, TypeError):
         return None
 
@@ -105,7 +105,7 @@ def _sb_parse_tracker(text):
 
 def _sb_tracker_due_items(rows, today):
     """到期判定：学习日期 + 间隔天 <= 今天 → 到期；到期且该列未勾(⬜) → 需要复习；已勾(✅)跳过"""
-    today_d = _sb_parse_date(today) or datetime.now().date()
+    today_d = _sb_parse_date(today) or datetime.now().astimezone().date()
     items = []
     for r in rows:
         study = _sb_parse_date(r["lastStudyDate"])
@@ -183,7 +183,7 @@ def _sb_section(text, title):
     for line in lines:
         stripped = line.strip()
         if collecting:
-            if stripped.startswith("#") or stripped.startswith("---"):
+            if stripped.startswith(("#", "---")):
                 break
             result.append(stripped)
         elif stripped in (f"## {title}", f"# {title}"):
@@ -231,5 +231,5 @@ def _sb_read_state():
     try:
         data = json.loads(_sb_read_text(STATE_PATH))
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {}
