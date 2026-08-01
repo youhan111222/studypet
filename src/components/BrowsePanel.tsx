@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db';
 import { useQuizStore } from '../store/quizStore';
+import { parseCsv, importQuestions } from '../lib/csvImport';
 import type { Question, SubjectKey, QuestionType, Difficulty } from '../types';
 
 const SUBJECTS: { key: SubjectKey; name: string }[] = [
@@ -25,6 +26,8 @@ export function BrowsePanel() {
   const [diff, setDiff] = useState<string>('all');
   const [favOnly, setFavOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -85,7 +88,39 @@ export function BrowsePanel() {
           className={`px-3 py-2 rounded-lg text-sm border ${favOnly ? 'bg-[rgba(245,197,24,0.15)] border-[#f5c518] text-[#f5c518]' : 'bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-secondary)]'}`}>
           ★ 只看收藏
         </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={async e => {
+            const f = e.target.files?.[0];
+            e.target.value = '';
+            if (!f) return;
+            try {
+              const text = await f.text();
+              const rows = parseCsv(text);
+              const headerIdx = rows.findIndex(r => /stem|题干/i.test(r.join(',')));
+              const dataRows = headerIdx >= 0 ? rows.slice(headerIdx + 1) : rows;
+              const summary = await importQuestions(dataRows);
+              setAll(await db.getQuestionsBySubject(subject, 1000));
+              setImportMsg(`导入完成：新增 ${summary.imported} 题，重复跳过 ${summary.skipped}，失败 ${summary.failed}${summary.errors.length ? '，' + summary.errors.slice(0, 3).join('；') : ''}`);
+            } catch (err) {
+              setImportMsg('导入失败：' + String(err));
+            }
+          }}
+        />
+        <button onClick={() => fileRef.current?.click()}
+          className="px-3 py-2 rounded-lg text-sm border bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]">
+          📥 导入 CSV
+        </button>
       </div>
+
+      {importMsg && (
+        <div className="mb-3 px-3 py-2 rounded-lg text-xs bg-[rgba(78,204,163,0.1)] border border-[rgba(78,204,163,0.25)] text-[var(--text-secondary)]">
+          {importMsg}
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         {list.length === 0 && (

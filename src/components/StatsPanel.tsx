@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { db } from '../db';
 import { errMsg } from '../utils';
+import { useStore } from '../store/useStore';
 import type { SubjectKey } from '../types';
 
 const SUBJECTS: { key: SubjectKey; name: string; color: string }[] = [
@@ -33,6 +34,8 @@ export function StatsPanel() {
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [totalAttempts, setTotalAttempts] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const examRecords = useStore(s => s.examRecords);
+  const deleteExamRecord = useStore(s => s.deleteExamRecord);
 
   useEffect(() => {
     (async () => {
@@ -105,6 +108,33 @@ export function StatsPanel() {
             );
           })}
         </div>
+      </div>
+
+      {/* 考试记录（对标 EXAM-MASTER 答题历史） */}
+      <div className="rounded-xl p-5 mb-4 bg-[var(--bg-card)] border border-[var(--border)] shadow-[var(--shadow-card)]">
+        <h3 className="text-[15px] font-bold mb-4 tracking-[0.02em] text-[var(--text-primary)]">考试记录</h3>
+        {examRecords.length === 0 ? (
+          <div className="text-xs text-[var(--text-muted)]">暂无考试记录，去「模拟考试」刷一场吧</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {examRecords.slice().sort((a, b) => (a.examDate < b.examDate ? 1 : -1)).map(r => {
+              const subj = SUBJECTS.find(s => s.key === r.subject);
+              const pct = r.totalScore > 0 ? Math.round((r.score / r.totalScore) * 100) : 0;
+              return (
+                <div key={r.id} className="flex items-center justify-between rounded-lg p-3 bg-[var(--bg-secondary)] border border-[var(--border)]">
+                  <div>
+                    <div className="text-sm text-[var(--text-primary)]">{r.examDate} · {subj?.name || r.subject} · {r.examType}</div>
+                    <div className="text-xs mt-0.5 text-[var(--text-muted)]">{r.notes}</div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className={`text-sm font-bold tabular-nums ${pct >= 60 ? 'text-[#2ecc71]' : 'text-[#e74c3c]'}`}>{r.score}/{r.totalScore}（{pct}%）</span>
+                    <button onClick={() => deleteExamRecord(r.id)} className="text-xs text-[var(--text-muted)] hover:text-[#e74c3c]">删除</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 章节详情 */}

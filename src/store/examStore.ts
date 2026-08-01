@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../db';
 import { judgeAnswer, syncSubjectProgress } from './quizStore';
+import { useStore } from './useStore';
 import { localToday } from '../utils';
 import type { Question, SubjectKey, Attempt } from '../types';
 
@@ -104,7 +105,18 @@ export const useExamStore = create<ExamStore>((set, get) => ({
     }));
     try {
       await db.attempts.bulkPut(attempts);
-      if (subject) await syncSubjectProgress(subject);
+      if (subject) {
+        await syncSubjectProgress(subject);
+        useStore.getState().addExamRecord({
+          id: `exam-${now}`,
+          subject,
+          score: result.correct,
+          totalScore: result.total,
+          examType: '模拟考试',
+          examDate: localToday(),
+          notes: `答对 ${result.correct}/${result.total}，答错 ${result.wrong}`,
+        });
+      }
     } catch (e) {
       console.error('exam 记录失败:', e);
     }
