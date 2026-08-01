@@ -954,4 +954,40 @@ const seedQuestions: Question[] = [
   { id: "elec-301", subject: "electronics", chapter: "半导体二极管", type: "single",
     stem: "二极管最主要的特性是？", options: ["正向导通特性", "反向截止特性", "检波特性", "单向导电特性"],
     answer: "D", analysis: "2023 广东专插本电子技术基础真题第 1 题。二极管核心特性是单向导电性。", difficulty: "easy", tags: ["真题", "2023", "二极管"], source: 'import', createdAt: '2026-08-01' },
+
+
+  // ===== 2026-08-01 真题录入批2（2024 政治多选 + 2022 高数 6 题） =====
+  { id: "pol-321", subject: "politics", chapter: "习近平新时代中国特色社会主义思想", type: "multiple",
+    stem: "中国空间站全面建成后首次出舱活动、漫步太空的航天员是（多选）：", options: ["费俊龙", "刘洋", "陈冬", "张陆"],
+    answer: "AD", analysis: "2024 广东专插本政治真题第 21 题。2023-02-10 神舟十五号乘组首次出舱：费俊龙、张陆。", difficulty: "medium", tags: ["真题", "2024", "时政"], source: 'import', createdAt: '2026-08-01' },
+  { id: "math-401", subject: "math", chapter: "函数与极限", type: "single",
+    stem: "lim(x→0) (sin3x + sinx) / x = ?", options: ["0", "1", "3", "4"],
+    answer: "D", analysis: "2022 广东专插本高数真题第 1 题。等价无穷小：sin3x/x→3，sinx/x→1，和 = 4。", difficulty: "easy", tags: ["真题", "2022", "极限"], source: 'import', createdAt: '2026-08-01' },
+  { id: "math-402", subject: "math", chapter: "微分中值定理与导数的应用", type: "single",
+    stem: "设函数 f(x) 具有二阶导数，且 f′(0)=-1，f′(1)=0，f″(0)=-1，f″(1)=-3，则下列说法正确的是？", options: ["点 x=0 是函数 f(x) 的极小值点", "点 x=0 是函数 f(x) 的极大值点", "点 x=1 是函数 f(x) 的极小值点", "点 x=1 是函数 f(x) 的极大值点"],
+    answer: "D", analysis: "2022 广东专插本高数真题第 2 题。极值必要条件：f′(1)=0 且 f″(1)=-3<0 → x=1 是极大值点；x=0 处 f′(0)≠0 不是极值点。", difficulty: "medium", tags: ["真题", "2022", "极值"], source: 'import', createdAt: '2026-08-01' },
+  { id: "math-403", subject: "math", chapter: "不定积分", type: "single",
+    stem: "已知 ∫f(x)dx = x² + C，则 ∫x·f(x²)dx = ?", options: ["x⁵ + C", "x⁴ + C", "(1/2)x⁴ + C", "(2/3)x³ + C"],
+    answer: "C", analysis: "2022 广东专插本高数真题第 3 题。f(x)=2x，则 x·f(x²)=x·2x²=2x³，∫2x³dx = (1/2)x⁴ + C。", difficulty: "medium", tags: ["真题", "2022", "积分"], source: 'import', createdAt: '2026-08-01' },
+  { id: "math-404", subject: "math", chapter: "无穷级数", type: "single",
+    stem: "级数 Σ(n=1→∞) (2n-1)/3ⁿ = ?", options: ["2", "1", "3/4", "1/2"],
+    answer: "B", analysis: "2022 广东专插本高数真题第 4 题。Σ(2n-1)/3ⁿ = 2Σ(n/3ⁿ) - Σ(1/3ⁿ) = 2·(3/4) - 1/2 = 1。", difficulty: "hard", tags: ["真题", "2022", "级数"], source: 'import', createdAt: '2026-08-01' },
+  { id: "math-405", subject: "math", chapter: "定积分及其应用", type: "single",
+    stem: "设 D = {(x,y) | 1 ≤ x²+y² ≤ 9}，则 ∬_D 1/(x²+y²) dσ = ?", options: ["2π", "10π", "2πln3", "4πln3"],
+    answer: "C", analysis: "2022 广东专插本高数真题第 5 题。极坐标：∫(0→2π)∫(1→3) (1/r²)·r dr dθ = 2π·ln r|(1→3) = 2πln3。", difficulty: "hard", tags: ["真题", "2022", "二重积分"], source: 'import', createdAt: '2026-08-01' },
+  { id: "math-406", subject: "math", chapter: "导数与微分", type: "fill",
+    stem: "参数方程 x=t²，y=log₃t，则 t=1 处 dy/dx = ____。", options: undefined,
+    answer: "1/(2ln3)", analysis: "2022 广东专插本高数真题填空第 6 题。dy/dx = (dy/dt)/(dx/dt) = [1/(t·ln3)]/(2t) = 1/(2t²·ln3)，t=1 时为 1/(2ln3)。", difficulty: "hard", tags: ["真题", "2022", "参数方程"], source: 'import', createdAt: '2026-08-01' },
+
+
+  // ===== 2026-08-01 真题录入批3（2024 电子技术基础 3 题） =====
+  { id: "elec-401", subject: "electronics", chapter: "组合逻辑电路", type: "single",
+    stem: "以下哪种不是逻辑函数的表示形式？", options: ["真值表", "表达式", "几何图", "逻辑图"],
+    answer: "C", analysis: "2024 广东专插本电子技术基础真题第 17 题。逻辑函数表示形式：真值表、表达式、卡诺图、逻辑图（几何图不是）。", difficulty: "easy", tags: ["真题", "2024", "逻辑代数"], source: 'import', createdAt: '2026-08-01' },
+  { id: "elec-402", subject: "electronics", chapter: "直流稳压电源", type: "single",
+    stem: "在桥式整流电路中，如果一只整流二极管断开，则该电路？", options: ["引起电源短路", "成为半波整流电路", "仍为桥式整流电路", "引起断路"],
+    answer: "B", analysis: "2024 广东专插本电子技术基础真题第 18 题。桥式整流四管中任一管断开 → 只剩半波整流。", difficulty: "medium", tags: ["真题", "2024", "整流"], source: 'import', createdAt: '2026-08-01' },
+  { id: "elec-403", subject: "electronics", chapter: "反馈放大电路", type: "fill",
+    stem: "改善增益特性用____反馈，相位平衡用____反馈。", options: undefined,
+    answer: "负正", analysis: "2024 广东专插本电子技术基础真题填空第 21 题。负反馈改善增益稳定性；正反馈用于振荡器相位平衡。", difficulty: "easy", tags: ["真题", "2024", "反馈"], source: 'import', createdAt: '2026-08-01' },
 ];
