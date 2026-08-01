@@ -30,7 +30,7 @@ jobs:
       - name: Lint (ruff)
         run: python -m ruff check .
 
-      - name: Python tests (skip RAG: needs local sentence-transformers model)
+      - name: "Python tests (skip RAG - needs local model)"
         run: python -m pytest -q -m "not rag"
 
       - name: TypeScript typecheck
