@@ -1,23 +1,24 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import type { ActivityLog, WeekStats } from './types';
 import { Sidebar } from './components/Sidebar';
-import { CoachPanel } from './components/CoachPanel';
 import { StudyTimer } from './components/StudyTimer';
 import { Dashboard } from './components/Dashboard';
-import { QuizPanel } from './components/QuizPanel';
-import { ReviewPanel } from './components/ReviewPanel';
-import { StatsPanel } from './components/StatsPanel';
-import { TaskList } from './components/TaskList';
-import { SchedulePanel } from './components/SchedulePanel';
-import { AnalyticsPanel } from './components/AnalyticsPanel';
-import { AchievementWall } from './components/AchievementWall';
-import { ImportantPanel } from './components/ImportantPanel';
-import { ScreenTimePanel } from './components/ScreenTimePanel';
 import { ReminderHost } from './hooks/useReminders';
 import { API } from './config';
 import { localDateStr, localToday } from './utils';
+
+const CoachPanel = lazy(() => import('./components/CoachPanel').then(m => ({ default: m.CoachPanel })));
+const QuizPanel = lazy(() => import('./components/QuizPanel').then(m => ({ default: m.QuizPanel })));
+const ReviewPanel = lazy(() => import('./components/ReviewPanel').then(m => ({ default: m.ReviewPanel })));
+const StatsPanel = lazy(() => import('./components/StatsPanel').then(m => ({ default: m.StatsPanel })));
+const TaskList = lazy(() => import('./components/TaskList').then(m => ({ default: m.TaskList })));
+const SchedulePanel = lazy(() => import('./components/SchedulePanel').then(m => ({ default: m.SchedulePanel })));
+const AnalyticsPanel = lazy(() => import('./components/AnalyticsPanel').then(m => ({ default: m.AnalyticsPanel })));
+const AchievementWall = lazy(() => import('./components/AchievementWall').then(m => ({ default: m.AchievementWall })));
+const ImportantPanel = lazy(() => import('./components/ImportantPanel').then(m => ({ default: m.ImportantPanel })));
+const ScreenTimePanel = lazy(() => import('./components/ScreenTimePanel').then(m => ({ default: m.ScreenTimePanel })));
 
 interface StatsApp { appName: string; category: string; duration: number; }
 interface StatsResponse { apps?: StatsApp[]; effectiveStudyMinutes?: number; totalActiveMinutes?: number; }
@@ -132,6 +133,7 @@ export default function App() {
         )}
 
         <ReminderHost />
+        <Suspense fallback={<div className="p-8 text-center text-[13px] text-[var(--text-muted)]">加载中…</div>}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/quiz/:subject" element={<QuizPanel />} />
@@ -144,9 +146,10 @@ export default function App() {
           <Route path="/important" element={<ImportantPanel />} />
           <Route path="/screentime" element={<ScreenTimePanel />} />
         </Routes>
+        </Suspense>
 
         {coachOpen ? (
-          <CoachPanel />
+          <Suspense fallback={null}><CoachPanel /></Suspense>
         ) : (
           <div onClick={toggleCoach} className="absolute bottom-[16px] left-1/2 -translate-x-1/2 max-w-[520px] w-[calc(100%-48px)] p-[10px_16px] rounded-[20px] bg-[var(--bg-secondary)] border border-[var(--border)] cursor-pointer flex items-center gap-[10px] shadow-[0_2px_12px_rgba(0,0,0,0.3)]">
             <div className="w-[32px] h-[32px] rounded-full bg-[linear-gradient(135deg,_#4ecca3,_#0a84ff)] flex items-center justify-center text-[16px] shrink-0">🐱</div>

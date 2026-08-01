@@ -1,8 +1,35 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['pwa-icon.svg'],
+      manifest: {
+        name: 'StudyPet 学习伴侣',
+        short_name: 'StudyPet',
+        description: '广东专插本备考：刷题、FSRS 复习、AI 教练、屏幕追踪、SecondBrain 联动',
+        lang: 'zh-CN',
+        theme_color: '#4F46E5',
+        background_color: '#111827',
+        display: 'standalone',
+        start_url: '/',
+        icons: [
+          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        navigateFallback: '/index.html',
+        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+      },
+    }),
+  ],
   server: {
     proxy: {
       // AI Coach（统一走 api_server.py :19998，重写后带 /api/coach 前缀）

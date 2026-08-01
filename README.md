@@ -2,6 +2,8 @@
 
 单机自部署的备考学习系统：屏幕时间追踪 × 刷题复习 × 宠物养成 × AI 教练，与本地知识库（SecondBrain）深度联动。
 
+> **技术栈**：React 18 + Vite 5 + TS + Zustand + Dexie + ts-fsrs + Flask/SQLite + **PWA 离线可安装**（借鉴 Anki 本地优先 / 刷题类 App 离线场景）
+
 ## 功能
 
 - **屏幕时间追踪**：Windows 前台窗口轮询（2s）+ TF-IDF 分类 + 浏览器标题二次打标，SQLite 落盘（WAL）
