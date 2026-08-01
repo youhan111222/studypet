@@ -97,7 +97,7 @@ export function QuizPanel() {
 
       if (key === 'Enter') {
         if (!showResult) {
-          if (q.type === 'essay') {
+          if (q.type === 'essay' || q.type === 'short') {
             if (!pendingSelf && selectedAnswer.trim()) setPendingSelf(true);
           } else if (selectedAnswer) {
             submitAnswer(selectedTags);
@@ -329,7 +329,7 @@ export function QuizPanel() {
       {/* 操作按钮 */}
       <div className="flex justify-center gap-3 mt-auto">
         {!showResult ? (
-          q.type === 'essay' ? (
+          q.type === 'essay' || q.type === 'short' ? (
             pendingSelf ? (
               <div className="flex items-center gap-3">
                 <span className="text-sm text-[var(--text-secondary)]">自评：</span>

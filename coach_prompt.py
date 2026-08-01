@@ -36,6 +36,30 @@ def get_knowledge_base():
     global _KNOWLEDGE_BASE_CACHE
     if _KNOWLEDGE_BASE_CACHE is None:
         _KNOWLEDGE_BASE_CACHE = _load_knowledge_base()
+
+# ===== 考点地图（docs/study-guide/{subject}.md，按科目注入，模块级缓存） =====
+_GUIDE_DIR = os.path.join(BASE_DIR, "docs", "study-guide")
+_GUIDE_CACHE: dict = {}
+
+_SUBJECT_GUIDE_KEY = {
+    "电子": "electronics", "电子技术": "electronics", "电子技术基础": "electronics",
+    "高数": "math", "数学": "math", "高等数学": "math",
+    "英语": "english", "政治": "politics",
+}
+
+def get_study_guide(subject: str) -> str:
+    """按科目加载考点地图；无匹配科目或文件缺失时返回空串（安全降级）。"""
+    if not subject:
+        return ""
+    key = _SUBJECT_GUIDE_KEY.get(subject.strip()) or subject.strip().lower()
+    if key not in _GUIDE_CACHE:
+        guide_file = os.path.join(_GUIDE_DIR, f"{key}.md")
+        try:
+            with open(guide_file, "r", encoding="utf-8") as f:
+                _GUIDE_CACHE[key] = f.read()
+        except OSError:
+            _GUIDE_CACHE[key] = ""
+    return _GUIDE_CACHE[key]
     return _KNOWLEDGE_BASE_CACHE
 
 
@@ -102,6 +126,13 @@ def build_system_prompt(context: dict, user_message: str = "") -> str:
                     syllabus_text += '  题型: ' + ' | '.join(parts) + '\n'
         except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError):
             syllabus_text = "（考纲数据未加载）"
+
+    study_guide = get_study_guide(context.get("subject", ""))
+    if study_guide:
+        subject_label = str(context.get("subject", ""))
+        syllabus_block = syllabus_text + "\n【考点地图 - " + subject_label + "】\n" + study_guide
+    else:
+        syllabus_block = syllabus_text
 
     knowledge_base = get_knowledge_base()
     memories = context.get("memories", [])
@@ -259,7 +290,7 @@ def build_system_prompt(context: dict, user_message: str = "") -> str:
 
 {chr(10).join(subject_snapshot_lines)}
 
-{syllabus_text}
+{syllabus_block}
 
 {context.get('system_state', '')}
 
