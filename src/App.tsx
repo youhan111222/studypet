@@ -19,6 +19,8 @@ const AnalyticsPanel = lazy(() => import('./components/AnalyticsPanel').then(m =
 const AchievementWall = lazy(() => import('./components/AchievementWall').then(m => ({ default: m.AchievementWall })));
 const ImportantPanel = lazy(() => import('./components/ImportantPanel').then(m => ({ default: m.ImportantPanel })));
 const ScreenTimePanel = lazy(() => import('./components/ScreenTimePanel').then(m => ({ default: m.ScreenTimePanel })));
+const ExamPanel = lazy(() => import('./components/ExamPanel').then(m => ({ default: m.ExamPanel })));
+const BrowsePanel = lazy(() => import('./components/BrowsePanel').then(m => ({ default: m.BrowsePanel })));
 
 interface StatsApp { appName: string; category: string; duration: number; }
 interface StatsResponse { apps?: StatsApp[]; effectiveStudyMinutes?: number; totalActiveMinutes?: number; }
@@ -145,6 +147,8 @@ export default function App() {
           <Route path="/achievements" element={<AchievementWall />} />
           <Route path="/important" element={<ImportantPanel />} />
           <Route path="/screentime" element={<ScreenTimePanel />} />
+          <Route path="/exam/:subject" element={<ExamPanel />} />
+          <Route path="/browse" element={<BrowsePanel />} />
         </Routes>
         </Suspense>
 

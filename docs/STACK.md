@@ -36,6 +36,15 @@
 - `Question.favorite?` 字段 + Dexie 持久化（`setQuestionFavorite` / `getFavoriteQuestions`）
 - 刷题页题目卡右上角 ☆/★ 一键收藏（本地题库量级小，用 filter 查询，避开 Dexie 对 boolean 索引的类型限制）
 
+### 5. 模拟考试（限时整卷）—— 借鉴 EXAM-MASTER
+- `store/examStore.ts`：选 10/20/30 题 + 15/30/45 分钟，倒计时自动交卷
+- 考试中可跳题、多选可改，交卷后统一判分：得分 + 答对/答错 + 错题回顾（正确答案对照）
+- 作答记录写入 attempts 并同步章节掌握度；计分纯函数 `scoreExam` 已单测
+
+### 6. 题库浏览/搜索 —— 借鉴 EXAM-MASTER 搜索筛选 + Anki Browse
+- 新路由 `/browse`：按科目切换 + 关键词搜索（题干/选项/解析）+ 题型/难度筛选 + 只看收藏
+- 展开看答案/解析，星标可收藏；侧边栏新增入口
+
 ## 四、结论与后续可选方向（未做，按需）
 
 | 方向 | 成本 | 收益 | 结论 |

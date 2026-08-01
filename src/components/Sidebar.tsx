@@ -22,6 +22,7 @@ const navItems = [
   { id: 'analytics', path: '/analytics', label: '深度分析', icon: '🔍' },
   { id: 'achievements', path: '/achievements', label: '成就墙', icon: '🏆' },
   { id: 'important', path: '/important', label: '重要事项', icon: '⭐' },
+  { id: 'browse', path: '/browse', label: '题库浏览', icon: '📖' },
   { id: 'screentime', path: '/screentime', label: '屏幕时间', icon: '🖥️' },
 ];
 

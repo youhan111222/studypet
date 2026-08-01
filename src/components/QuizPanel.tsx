@@ -165,6 +165,10 @@ export function QuizPanel() {
           ← {SUBJECT_NAMES[subject || ''] || subject}
         </button>
         <div className="flex items-center gap-3">
+          <button onClick={() => navigate(`/exam/${subject}`)}
+            className="text-sm px-3 py-1 rounded-full bg-[rgba(231,76,60,0.12)] text-[#e74c3c] border border-[rgba(231,76,60,0.4)]">
+            ⏱ 模拟考试
+          </button>
           <button onClick={handleAiGenerate} disabled={aiLoading}
             className="text-sm px-3 py-1 rounded-full bg-[var(--accent-dim)] text-[var(--accent)] border border-[var(--accent)] disabled:opacity-30">
             {aiLoading ? '生成中...' : '✨ AI 出题'}
