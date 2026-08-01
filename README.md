@@ -70,7 +70,11 @@ CI（`.github/workflows/ci.yml`）在 push/PR 时自动执行上述全部门禁�
 ## 目录速览
 
 ```
-api_server.py       API + AI 教练（路由/提示词/SecondBrain/RAG）
+api_server.py       API 路由与编排（19998，统一入口）
+coach_prompt.py     AI 教练系统提示词构建（考纲/知识库/决策矩阵）
+sb_integration.py   SecondBrain 读写解析（追踪器/错题/日记/状态）
+rag_service.py      SecondBrain 语义检索（ChromaDB，静默降级）
+schedule_xls.py     官方课表 XLS 解析
 tracker.py          屏幕追踪核心（Windows API + 分类器 + 落盘）
 sync-engine.py      每晚同步 activity.db → SecondBrain 学习状态/日记
 test_api.py         后端集成测试（独立端口 23001，不碰真实服务）
