@@ -122,6 +122,6 @@ export interface Attempt {
 export interface ReviewCard {
   id: string; questionId: string;
   stability: number; difficulty: number; elapsed_days: number; scheduled_days: number;
-  reps: number; lapses: number; state: 'New' | 'Learning' | 'Review' | 'Relearning';
+  reps: number; lapses: number; learning_steps?: number; state: 'New' | 'Learning' | 'Review' | 'Relearning';
   lastReview: string | null; due: string; subject: SubjectKey; chapter: string;
 }

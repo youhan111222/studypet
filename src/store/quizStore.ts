@@ -7,6 +7,24 @@ import { archiveMistake } from '../lib/secondbrain';
 import type { Question, Attempt, ReviewCard, SubjectKey, ErrorTag, MasteryLevel } from '../types';
 
 const scheduler = fsrs();
+let currentRetention = 0.9;
+
+/** Anki 精髓：期望记忆保持率（Desired Retention）。FSRS 默认 R=90%，
+ * Anki 允许用户调高/调低：越高复习越频繁、记忆越牢。 */
+export function setDesiredRetention(retention: number) {
+  const r = Math.min(0.99, Math.max(0.7, retention));
+  if (Math.abs(r - currentRetention) < 0.001) return;
+  try {
+    // parameters setter 是整组替换：先读当前参数再合并，避免重置 enable_short_term 等
+    scheduler.parameters = { ...scheduler.parameters, request_retention: r };
+    currentRetention = r;
+  } catch (e) {
+    console.error('setDesiredRetention failed:', e);
+  }
+}
+
+export function getFsrsScheduler() { return scheduler; }
+export function getDesiredRetention() { return currentRetention; }
 
 // ====== 错题归档节流：同一题 10 分钟内只归档一次 ======
 const lastArchiveTs = new Map<string, number>();
@@ -73,6 +91,7 @@ function toReviewCard(fsrsCard: Card, question: Question): ReviewCard {
     scheduled_days: fsrsCard.scheduled_days,
     reps: fsrsCard.reps,
     lapses: fsrsCard.lapses,
+    learning_steps: fsrsCard.learning_steps,
     state: fsrsCard.state as unknown as ReviewCard['state'],
     lastReview: fsrsCard.last_review?.toISOString() || null,
     due: fsrsCard.due.toISOString(),
@@ -91,6 +110,7 @@ function fsrsCardFromReview(existing: ReviewCard): Card {
     scheduled_days: existing.scheduled_days,
     reps: existing.reps,
     lapses: existing.lapses,
+    learning_steps: existing.learning_steps ?? 0,
     state: existing.state as unknown as Card['state'],
     last_review: existing.lastReview ? new Date(existing.lastReview) : null,
   } as Card;

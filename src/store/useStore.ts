@@ -36,6 +36,8 @@ interface Store {
   activeTimerSubject: SubjectKey | null;
   timerStartTime: number | null;
   timerAccumulatedSeconds: number;
+  desiredRetention: number;
+  setDesiredRetention: (r: number) => void;
   startStudyTimer: (subject: SubjectKey) => void;
   pauseStudyTimer: () => void;
   stopStudyTimer: () => void;
@@ -195,6 +197,7 @@ export const useStore = create<Store>()(
       activeTimerSubject: null,
       timerStartTime: null,
       timerAccumulatedSeconds: 0,
+      desiredRetention: 0.9,
 
       toggleTask: (id) => set(state => {
         const today = localToday();
@@ -402,6 +405,8 @@ export const useStore = create<Store>()(
       deleteStudyChecklist: (id) => set(state => ({ studyChecklists: state.studyChecklists.filter(c => c.id !== id) })),
       addPracticeLog: (log) => set(state => ({ practiceLogs: [...state.practiceLogs, log] })),
       // ====== 学习计时器 ======
+      setDesiredRetention: (r) => set({ desiredRetention: r }),
+
       startStudyTimer: (subject) => {
         const state = useStore.getState();
         const now = Date.now();
@@ -476,8 +481,12 @@ export const useStore = create<Store>()(
     }),
     {
       name: 'studypet-data',
-      version: 4,
+      version: 5,
       migrate: (persisted: any, version: number) => {
+        // v4 → v5: 默认期望记忆保持率 90%（Anki Desired Retention）
+        if (version < 5 && persisted.state) {
+          persisted.state.desiredRetention = 0.9;
+        }
         if (version < 3) {
           persisted.state.schedule = [];
         }

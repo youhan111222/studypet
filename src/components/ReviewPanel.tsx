@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuizStore } from '../store/quizStore';
-import { Rating, type Grade } from 'ts-fsrs';
+import { useQuizStore, getFsrsScheduler, setDesiredRetention } from '../store/quizStore';
+import { useStore } from '../store/useStore';
+import { db } from '../db';
+import { Rating, type Card, type Grade } from 'ts-fsrs';
 
 const RATING_LABELS: Record<number, { label: string; color: string; desc: string }> = {
   [Rating.Again]: { label: '完全忘了', color: '#e74c3c', desc: '重置复习' },
@@ -22,6 +24,30 @@ export function ReviewPanel() {
   const { reviewCards, reviewIndex, questions, loadDueReviews, submitReviewRating, nextReviewQuestion } = useQuizStore();
   const [showAnswer, setShowAnswer] = useState(false);
   const [rated, setRated] = useState(false);
+  const desiredRetention = useStore(s => s.desiredRetention);
+  const setDesiredRetentionStore = useStore(s => s.setDesiredRetention);
+  const [retentionR, setRetentionR] = useState<number | null>(null);
+  const [preview, setPreview] = useState<Partial<Record<number, { card: Card }>> | null>(null);
+  const [stateStats, setStateStats] = useState({ due: 0, learning: 0, review: 0, relearning: 0 });
+
+  // Anki 精髓：期望记忆保持率 → FSRS request_retention
+  useEffect(() => { setDesiredRetention(desiredRetention); }, [desiredRetention]);
+
+
+  // 复习状态统计（Anki 风格：学习/复习/重学 + 今日到期）
+  useEffect(() => {
+    void db.reviewCards.toArray().then(cards => {
+      const now = new Date();
+      const s = { due: 0, learning: 0, review: 0, relearning: 0 };
+      for (const c of cards) {
+        if (new Date(c.due) <= now) s.due++;
+        if (c.state === 'Learning') s.learning++;
+        else if (c.state === 'Review') s.review++;
+        else if (c.state === 'Relearning') s.relearning++;
+      }
+      setStateStats(s);
+    }).catch(() => {});
+  }, [reviewCards.length]);
 
   useEffect(() => { loadDueReviews(); }, []);
 
@@ -54,6 +80,9 @@ export function ReviewPanel() {
           <div className="text-5xl mb-4">🎉</div>
           <div className="text-base font-bold mb-2 text-[var(--text-primary)]">没有待复习的题目</div>
           <div className="text-sm mb-4">所有错题都在按计划复习中</div>
+          <div className="text-xs mb-4 text-[var(--text-muted)]">
+            📊 今日到期 {stateStats.due} · 学习中 {stateStats.learning} · 复习中 {stateStats.review} · 重学 {stateStats.relearning}
+          </div>
           <button onClick={() => navigate('/')} className="px-4 py-2 rounded-lg text-sm bg-[var(--accent)] text-[#fff]">返回首页</button>
         </div>
       </div>
@@ -63,6 +92,19 @@ export function ReviewPanel() {
   const q = questions[reviewIndex];
   const card = reviewCards[reviewIndex];
   if (!q || !card) return null;
+  // 当前卡片：记忆可提取性 R% + 四个评分的下次间隔预测（Anki 调度预览）
+  useEffect(() => {
+    if (!card) return;
+    try {
+      const s = getFsrsScheduler();
+      setRetentionR(s.get_retrievability(card as unknown as Card, new Date(), false));
+      setPreview(s.repeat(card as unknown as Card, new Date()) as unknown as Partial<Record<number, { card: Card }>>);
+    } catch {
+      setRetentionR(null);
+      setPreview(null);
+    }
+  }, [reviewIndex, card.id]);
+
 
   return (
     <div className="flex-1 flex flex-col p-6 overflow-auto">
@@ -71,7 +113,22 @@ export function ReviewPanel() {
         <button onClick={() => navigate('/')} className="text-sm text-[var(--text-muted)]">
           ← 返回
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {retentionR !== null && (
+            <span className="text-xs px-2 py-1 rounded-full bg-[rgba(10,132,255,0.12)] text-[#0a84ff]" title="FSRS 记忆可提取性（Anki 算法）">
+              R {Math.round(retentionR * 100)}%
+            </span>
+          )}
+          <span className="text-xs px-2 py-1 rounded-full bg-[var(--bg-card)] text-[var(--text-secondary)]" title="期望记忆保持率：越高复习越频繁（Anki Desired Retention）">
+            保持率
+            <select
+              value={desiredRetention}
+              onChange={e => setDesiredRetentionStore(Number(e.target.value))}
+              className="bg-transparent outline-none cursor-pointer"
+            >
+              {[0.8, 0.85, 0.9, 0.95].map(r => <option key={r} value={r}>{Math.round(r * 100)}%</option>)}
+            </select>
+          </span>
           <span className="text-xs px-3 py-1 rounded-full bg-[var(--bg-card)] text-[var(--text-secondary)]">
             {reviewIndex + 1} / {reviewCards.length}
           </span>
@@ -116,6 +173,9 @@ export function ReviewPanel() {
               <div>
                 <div className={`text-sm font-bold ${ratingColorClass[RATING_LABELS[rating].color]}`}>{RATING_LABELS[rating].label}</div>
                 <div className="text-xs text-[var(--text-muted)]">{RATING_LABELS[rating].desc}</div>
+              </div>
+              <div className="text-right text-xs text-[var(--text-secondary)]">
+                {preview?.[rating]?.card ? (preview[rating]!.card.scheduled_days >= 1 ? `下次 +${preview[rating]!.card.scheduled_days}天` : '稍后') : ''}
               </div>
             </button>
           ))}
