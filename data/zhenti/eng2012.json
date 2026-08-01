@@ -1,0 +1,596 @@
+[
+ {
+  "num": "l",
+  "type": "?",
+  "stem": "It is necessary to put the medicine out of the kids' .",
+  "options": [
+   "hold",
+   "hand",
+   "reach",
+   "place"
+  ]
+ },
+ {
+  "num": "2",
+  "type": "?",
+  "stem": "Mary had a great deal of trouble the rest runners.",
+  "options": [
+   "coming up with",
+   "keeping up with",
+   "living up to",
+   "making up for"
+  ]
+ },
+ {
+  "num": "3",
+  "type": "?",
+  "stem": "We'd better take every _ to improve our English.",
+  "options": [
+   "time",
+   "case",
+   "thing",
+   "chance"
+  ]
+ },
+ {
+  "num": "4",
+  "type": "?",
+  "stem": "He didn't expect to _ his father in the street yesterday.",
+  "options": [
+   "run into",
+   "work with",
+   "deal with",
+   "run off"
+  ]
+ },
+ {
+  "num": "5",
+  "type": "?",
+  "stem": "Many experiments have shown that moderate exercises contribute____ good health.",
+  "options": [
+   "towards",
+   "for",
+   "with",
+   "to"
+  ]
+ },
+ {
+  "num": "6",
+  "type": "?",
+  "stem": "Their evidence was convincing but not .",
+  "options": [
+   "off the point",
+   "on the point",
+   "to the point",
+   "in the point"
+  ]
+ },
+ {
+  "num": "7",
+  "type": "?",
+  "stem": "Her father's death _ her deeply.",
+  "options": [
+   "affected",
+   "effected",
+   "offcnded",
+   "infected"
+  ]
+ },
+ {
+  "num": "8",
+  "type": "?",
+  "stem": "\"How do you _ the golbal warming?\" the scientist asked the students.",
+  "options": [
+   "count on",
+   "account on",
+   "count for",
+   "account for"
+  ]
+ },
+ {
+  "num": "9",
+  "type": "?",
+  "stem": "The city of Wuhan is of three sections. which are separated by the Yangtze River.",
+  "options": [
+   "combined",
+   "made",
+   "composed",
+   "formed"
+  ]
+ },
+ {
+  "num": "10",
+  "type": "?",
+  "stem": "On second _, we decided not to sell our house.",
+  "options": [
+   "plans",
+   "thoughts",
+   "ideas",
+   "minds"
+  ]
+ },
+ {
+  "num": "11",
+  "type": "?",
+  "stem": "Some plants are very sensitive _ the changes of the environment.",
+  "options": [
+   "from",
+   "against",
+   "to",
+   "with"
+  ]
+ },
+ {
+  "num": "12",
+  "type": "?",
+  "stem": "I used to smoke__ but I gave it up a year ago.",
+  "options": [
+   "seriously",
+   "heavily",
+   "badly",
+   "severely"
+  ]
+ },
+ {
+  "num": "13",
+  "type": "?",
+  "stem": "The fire that____ yesterday caused at least ten people's death.",
+  "options": [
+   "broke off",
+   "broke up",
+   "broke down",
+   "broke out"
+  ]
+ },
+ {
+  "num": "14",
+  "type": "?",
+  "stem": "His explanation has our misunderstanding.",
+  "options": [
+   "clarified",
+   "surveyed",
+   "classified",
+   "survived"
+  ]
+ },
+ {
+  "num": "15",
+  "type": "?",
+  "stem": "The trip to the west has been because of the bad weather.",
+  "options": [
+   "insisted",
+   "canceled",
+   "challenged",
+   "decided"
+  ]
+ },
+ {
+  "num": "16",
+  "type": "?",
+  "stem": "It is believed that_ __ spending will eventually lead to failure.",
+  "options": [
+   "natural",
+   "mysterious",
+   "moderate",
+   "excessive"
+  ]
+ },
+ {
+  "num": "17",
+  "type": "?",
+  "stem": "The guests are often very well by the host in that city.",
+  "options": [
+   "entertained",
+   "engaged",
+   "reassured",
+   "refreshed"
+  ]
+ },
+ {
+  "num": "18",
+  "type": "?",
+  "stem": "The factors which influence reading speed often _ with each other",
+  "options": [
+   "instruct",
+   "install",
+   "interact",
+   "intend"
+  ]
+ },
+ {
+  "num": "19",
+  "type": "?",
+  "stem": "The man lost his _ just because his secretary was ten minutes late.",
+  "options": [
+   "temper",
+   "mood",
+   "mind",
+   "passion"
+  ]
+ },
+ {
+  "num": "20",
+  "type": "?",
+  "stem": "During the races there were two accidents to motor-cyclists including one accident.",
+  "options": [
+   "deadly",
+   "fatal",
+   "killing",
+   "deathly"
+  ]
+ },
+ {
+  "num": "21",
+  "type": "?",
+  "stem": "in the street, he could feel the happiness of Christmas.",
+  "options": [
+   "Walked",
+   "Walking",
+   "To walk",
+   "Having walked"
+  ]
+ },
+ {
+  "num": "22",
+  "type": "?",
+  "stem": "_ the project. we'll have to work two more weeks.",
+  "options": [
+   "Completing",
+   "Complete",
+   "Having completed",
+   "To complete"
+  ]
+ },
+ {
+  "num": "23",
+  "type": "?",
+  "stem": "The development of the event is influenced by many factors, are beyond our control.",
+  "options": [
+   "most of them",
+   "most of which",
+   "most of what",
+   "most of that"
+  ]
+ },
+ {
+  "num": "24",
+  "type": "?",
+  "stem": "It was the training at college _ made him such a good writer.",
+  "options": [
+   "as",
+   "which",
+   "that",
+   "what"
+  ]
+ },
+ {
+  "num": "25",
+  "type": "?",
+  "stem": "We finished our assignment when the teacher came to the door.",
+  "options": [
+   "had just had",
+   "have just had",
+   "just had had",
+   "just have had"
+  ]
+ },
+ {
+  "num": "26",
+  "type": "?",
+  "stem": "Catherine has never dreamed of abroad.",
+  "options": [
+   "having sent",
+   "to be sent",
+   "being sent",
+   "to send"
+  ]
+ },
+ {
+  "num": "27",
+  "type": "?",
+  "stem": "After you have finished reading the book, please .just put it back it belongs.",
+  "options": [
+   "where",
+   "which",
+   "what",
+   "that"
+  ]
+ },
+ {
+  "num": "28",
+  "type": "?",
+  "stem": "They were all delighted at the news Tom won the First Prize.",
+  "options": [
+   "when",
+   "which",
+   "what",
+   "that"
+  ]
+ },
+ {
+  "num": "29",
+  "type": "?",
+  "stem": "You can distinguish the twins very easily, _ Tom is quiet while Jack is active.",
+  "options": [
+   "so",
+   "but",
+   "for",
+   "and"
+  ]
+ },
+ {
+  "num": "30",
+  "type": "?",
+  "stem": "Mary. together with her children, some video show when I went into the sitting room.",
+  "options": [
+   "were watching",
+   "was watching",
+   "is watching",
+   "are watching 3 l . The student checked his writing carefully lest it _ some spelling mistakes. A. had B. has C. will have D. should have"
+  ]
+ },
+ {
+  "num": "32",
+  "type": "?",
+  "stem": "By this summer. Elizabeth _ here for eight years.",
+  "options": [
+   "will live",
+   "would have lived",
+   "will have lived",
+   "has lived"
+  ]
+ },
+ {
+  "num": "33",
+  "type": "?",
+  "stem": "No sooner than the bus started off.",
+  "options": [
+   "had his luggage been loaded",
+   "was his luggage loaded",
+   "loaded his luggage",
+   "his luggage was being loaded"
+  ]
+ },
+ {
+  "num": "34",
+  "type": "?",
+  "stem": "Aunt Sharon looks sleepy. She _ to bed very late last night.",
+  "options": [
+   "can have gone",
+   "must have gone",
+   "would have gone",
+   "should have gone"
+  ]
+ },
+ {
+  "num": "35",
+  "type": "?",
+  "stem": "Walking is useful as any other to lose weight.",
+  "options": [
+   "such",
+   "as",
+   "such a",
+   "as a Part II Reading Comprehension (40 %) Passage I What is your favourite colour? Do you like yellow, orange, or red'? If you do, you must be an optimist（乐观主义者）. a leader. an acive person who enjoys life. people and excitement. Do you prefer greys and blues? Then you are probably quict. shy. and you would rather follow than lead You tend to be a pessimist (悲观主义者) . At least. this is what psychologists tell us. and they should know. because they have been seriously studying the meaning of colours preference, as well as the effect that colours have on human beings. They tell us. among other facts. that we do not choose our favourite clour as we growup-we are born with our preference. If you happen to love brown, you did so as soon as you opened your eyes, or at least as soon as you could see clearly. Colours do influence our moods------there is no doubt about it. A yellow room makes most people feel more cheerful and more relaxed than a dark green one; and a red dress brings warmth and cheer to the saddest winter day. On the other hand, black is depressing. A black bridge over the Thames River. Near London. used to be the scene of more suicides (自杀) than any other bridge in the area-until it was repainted green. The number of suicide attempts immediately fell down sharply; perhaps it would have fallen even more if the bridge had been done in pink or baby blue. Light and bright colours make people not only happier but more active. It is an established fact that factory workers work better. harder. and have fewcr accidents when their machines arc painted orange rather than black or grey."
+  ]
+ },
+ {
+  "num": "36",
+  "type": "?",
+  "stem": "The sentence \"You would rather follow than lead\" in paragraph l means that you would .",
+  "options": [
+   "like to lead followers",
+   "be afraid of following others",
+   "be a member rather than a leader",
+   "like to be a leader rather than a follower"
+  ]
+ },
+ {
+  "num": "37",
+  "type": "?",
+  "stem": "If one enjoys life, one is sure to prefer .",
+  "options": [
+   "red to yellow",
+   "blue to orange",
+   "blue to yellow",
+   "red to grey"
+  ]
+ },
+ {
+  "num": "38",
+  "type": "?",
+  "stem": "Which of the following statements is true?",
+  "options": [
+   "People's preference of one colour to another is instinct.",
+   "People's preference of one colour to another is acquired as they grow up.",
+   "Factory workers meet fewer accidents when their machines are painted grey.",
+   "More people happen to love brown because they saw it when they were born."
+  ]
+ },
+ {
+  "num": "39",
+  "type": "?",
+  "stem": "Those who committed suicide preferred the bridge over the Thames River to others because of its",
+  "options": [
+   "shape",
+   "colour",
+   "structure",
+   "materials"
+  ]
+ },
+ {
+  "num": "40",
+  "type": "?",
+  "stem": "The main idea of the passage is that_ .",
+  "options": [
+   "colours affect people's mood",
+   "colours affect people's character",
+   "bright colours make people more active",
+   "colours preference shows people's courage Passage 2 Charlotte Hollins knows she faces a battle. The 23-year-old British farmer and her 21-year-old brother Ben are fighting to save the farm from the city developers that their father worked on since he was"
+  ]
+ },
+ {
+  "num": "14",
+  "type": "?",
+  "stem": "While she is confident they will succeed. she lists farming's many challenges: \"You don't often get a day off. Supermarkets put a lot of pressure on farmers to keep prices down. With fewer people working on farms it can be isolating.\" she said. \"There is a high rate of suicide and farming will never make you rich!\" Oliver Robinson. 25, grew up on a farm in Yorkshire. But he never considered staying on his father and grandfather's land. \"I'm sure Dan hoped I'd stay,\" he said. \"I guess it's a nice, straightforward life, but it doesn't appeal. For young ambitious people, farm life would be a hard world.\" For Robinson. farming doesn't offer much in terms of money or lifestyle. Hollins agrees that economics stops people from pursuing farming rewards: \"providing for a vital human need . while working outdoors with nature.\" Farming is a big political issue in the UK. \"Buy British\" campaigns encourage consumers not a buy cheaper imported foods. The 2001 \"foot and mouth crisis\" closed thousands of farms, stopped meat exports, and raised public consciousness of troubles in British farming. Jamie Oliver's 2005 campaign to get children to eat healthily also highlighted the issue. This national concern brings hope for farmers competing with powerful supermarkets. While most people buy food from the big supermarkets. hundreds of independent Farmers' Markets are becoming popular. 41 . Charlotte Hollins is talking about her feeling of a battle between \"",
+  "options": [
+   "the poor and the rich",
+   "farmers and city developers",
+   "young people and their parents",
+   "small markets and supermarkets"
+  ]
+ },
+ {
+  "num": "42",
+  "type": "?",
+  "stem": "In the eyes of Charlotte Hollins. makes fewer people work on farms.",
+  "options": [
+   "rich life of farmers",
+   "a low rate of suicide",
+   "hard life on the farms",
+   "high prices of farm products"
+  ]
+ },
+ {
+  "num": "43",
+  "type": "?",
+  "stem": "According to the passage, more and more young people leave their fathers' land because farming cannot offer .",
+  "options": [
+   "a hard world",
+   "a vital human need",
+   "a nice and straightforward life",
+   "enough money and honourable life"
+  ]
+ },
+ {
+  "num": "44",
+  "type": "?",
+  "stem": "\"Buy British\" campaigns____",
+  "options": [
+   "bring benefit to farmers",
+   "stopped meat export",
+   "closed thousands of farms",
+   "ask children to eat British foods"
+  ]
+ },
+ {
+  "num": "45",
+  "type": "?",
+  "stem": "According to the passage, Farmers ' Markets are becoming popular because .",
+  "options": [
+   "thousands of farms are closed",
+   "farmers are the owners of the markets",
+   "more people are concerned about healthy food",
+   "Jamie Oliver's 2005 campaigns urge people to \"Buy BritisW' Passage 3 No one knows exactly how many disabled people (残疾人) there arc in the word. but estimates suggest the figure is over 450 million. The number of disabled people in India alone is probably more than double the total population of Canada. In the United Kingdom. about one in ten people have some disability. Disability is not just something hat happens to other people: as we get older. many of us will become less mobile. hard of hearing or have failing eyesight. Disablement can take many forms and occur at any time of life. Some people are born with disabilities. Many others become disabled as they get older. There are many progressive disabling diseases. The longer time goes on. the worse they become. Some people are disabled in accidents. Many others may have a period of disability in the form of a mental illness. All are affected by people's attitude towards them. Disabled people face many physical barriers. Next time you go shopping or to work or visit friends, imagine how you would manage if you could not get up steps, or on to buses and trains. How would you cope if you could not see where you were going or could not hear the traffic? But there are other barriers: prejudice can be even harder to break down and ignorance inevitably represents by far the greatest barrier of all. It is almost impossible for the able-bodied to fully appreciate what the severely disabled go through. so it is important to draw attention to these barriers and show that it is the individual person and their ability. not their disability, which counts."
+  ]
+ },
+ {
+  "num": "46",
+  "type": "?",
+  "stem": "The first paragraph tells us that .",
+  "options": [
+   "the number of disabled people in India is the greatest",
+   "there are less than 450 million disabled people in the world",
+   "there are more than 450 million disabled people in the world",
+   "the number of disabled people in India is equal to the total population of Canada"
+  ]
+ },
+ {
+  "num": "47",
+  "type": "?",
+  "stem": "The key word in paragraph 4 is _",
+  "options": [
+   "disability",
+   "ignorance",
+   "prejudice",
+   "barriers"
+  ]
+ },
+ {
+  "num": "48",
+  "type": "?",
+  "stem": "Which of the following statements is NOT true?",
+  "options": [
+   "There are about 10 percent disabled people in the UK_",
+   "There still exists prejudice against the disabled because of ignorance.",
+   "Even the able-bodied might lose some of their body functions when they get older.",
+   "The whole society should pay attention to the barriers faced by the disabled people."
+  ]
+ },
+ {
+  "num": "49",
+  "type": "?",
+  "stem": "The clause \" which counts \" in the last paragraph means that _ .",
+  "options": [
+   "ability is the most important",
+   "disability is considered",
+   "disability is included",
+   "barrier is the most important"
+  ]
+ },
+ {
+  "num": "50",
+  "type": "?",
+  "stem": "It can be concluded from the passage that _",
+  "options": [
+   "we should try our best to prevent disablement",
+   "we should take a proper attitude towards the disabled",
+   "both physical and mental barriers are hard to break down",
+   "the able-bodied will never fully understand the disabled Passage 4 It is really a surprise that after hundreds of years, educationists have still failed to design anything more efficient and reliable than examinations. It is claimed that examinations test what you know, but it is common knowledge that they more often do the exact opposite. They may be a good means of testing memory, or the skills of working rapidly under extreme pressure, but they can tell you nothing about a person's true ability. As anxiety-makers. examinations are second to none. That is because so much depends on them. They are the mark of success or failure in our society. Your whole future may be decided in one fateful day. No one can show his best in worry, or after a sleepless night, yet this is precisely what the examination system expects him to do. A good education should, among other things, train you to think for yourself. The examination system however, does anything but that. What has to be learnt is laid down by a syllabus (教学大纲 ) . so the student is encouraged to memorize. Examinations do not motivate a student to read widely, and they do not enable him to seek more and more knowledge. Furthermore. teachers themselves are often judged by the results of their students' examinations. Consequently, they have to train their students to master exam techniques which they dislike. They most successful candidates are not always the best educated but the best trained.. The results on which so much depends are often nothing more than a subjective assessment by some anonymous (匿名的) examiners. They certainly make mistakes. because they have to mark mountains of s (答卷) in a limited amount of time. They work under the same sort of pressure as the candidates."
+  ]
+ },
+ {
+  "num": "51",
+  "type": "?",
+  "stem": "The main idea of this passage is that examinations are .",
+  "options": [
+   "anxiety-makers",
+   "harmful to education",
+   "reliable and efficient",
+   "good measures of memory"
+  ]
+ },
+ {
+  "num": "52",
+  "type": "?",
+  "stem": "It is clear that the author examinations.",
+  "options": [
+   "argues for",
+   "argues against",
+   "is interested in",
+   "is indifferent to"
+  ]
+ },
+ {
+  "num": "53",
+  "type": "?",
+  "stem": "The fate of students is decided by _ according to the passage.",
+  "options": [
+   "examination",
+   "education",
+   "teaching",
+   "learning"
+  ]
+ },
+ {
+  "num": "54",
+  "type": "?",
+  "stem": "According to the author, the most importance of a good education is to .",
+  "options": [
+   "encourage students to read widely",
+   ".teach students how to tackle exams",
+   "train students to think on their own",
+   "encourage students to seek more knowledge"
+  ]
+ },
+ {
+  "num": "55",
+  "type": "?",
+  "stem": "Which statement is NOT mentioned in the passage?",
+  "options": [
+   "Examinations can make students anxious.",
+   "The examiners might make mistakes in marking.",
+   "Teachers ' work is .judged based on the results of examinations.",
+   "Tools better than examinations to test students' ability have been found. Part III Cloze (10%) When I come across a good article in reading newspapers. I often want to cut and keep it. But just as I am about to do so I find the 56 0n the opposite side is as much interesting. It may be a discussion of the way to 57 in good health. or a report about 58 to behave and conduct oneself in society. If I cut the front article, the opposite one is likely t0 59 damage, leaving out half of it or keeping the text 60 the title. Therefore. I should prepare 61 I start to cut. Or it will be halfway done when I find out the 62 result. 63 two things are to be done at the same time. You can only take up one of them,the other has to wait or be 64 _ But you know the future is unpredictable----the changed situation may not allow you to do what is left 65 . Thus you are caught in a 66 position and feel sad. How should the nice chances and brilliant ideas gather around all at once? What are you going to do when you 67 two things at the same time? It may happen that you life 68 greatly on your preference of one choice to the other. In fact that is what 69 is like. We are often . 70 with the two opposite sides of a thing which are both desirable 71 a newspaper cutting. It often occurs that our attention is drawn to one thing only 72 we get into another. The 73 may be more important than the latter and give rise to a dividcd mind. A famous philosopher 74 said \"When one door shuts, another opens in life.\" So a casual choice may not be a 75 0ne."
+  ]
+ }
+]

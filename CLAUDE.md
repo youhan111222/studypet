@@ -1,4 +1,34 @@
-# StudyPet — AI 专升本备考助手
+# StudyPet 开发规范与工具
+
+## 真题抓取管道（tools/fetch_zhenti.py）
+
+已打通通道：
+1. **诚为径 cwjedu 单题页**：tzzsb.cwjedu.com/st/{id}（批量，题干+选项完整，无答案）— 政治 2022-2026、英语 2012-2024 单题密集
+   - 已知 ID 段：英语 1200-1300（2020）、2290-2370（2016）、6530-6570（2021）、11600-11640（2024）；政治 9360-9400（2024）、10440-10500（2022/2023）
+2. **诚为径试卷页**：cwjedu.com/zsbtk/{sid}（整卷客观题，答案需另源）— 如 53509 = 2024 政治 39 题
+3. **通用网页卷**：新东方 xdf.cn / koolearn（政治官方答案）、搜狐（2012 英语完整卷含官方答案）、offcnzsb
+4. **mcp study-hub 搜索**：B站/知乎/小红书（server.py 已修 stdin UTF-8；重启 Codex 后生效）
+
+常用命令：
+```powershell
+python tools/fetch_zhenti.py st --ids 10440-10499 --out data/zhenti/pol2223.json
+python tools/fetch_zhenti.py exam --sid 53509 --out data/zhenti/pol2024.json
+python tools/fetch_zhenti.py page --url https://... --out data/zhenti/xxx.json
+python tools/fetch_zhenti.py gen --data x.json --answers answers.json --subject politics
+```
+
+录入规则（宁缺毋滥）：
+- 只录题干/选项/答案完整的题；无短文的阅读题（main idea/infer）不录
+- 答案需官方或双源验证；答案不确定不录
+- source: 'import' + tags 标注年份
+
+## 常见坑
+- seed.ts 是 CRLF：Node 字符串替换必须用 \r\n 或用 Python（universal newline）
+- TS 单引号字符串内数学撇号（A'B'/y'）会截断语法 → 用双引号包裹或转义
+- PowerShell 管道传中文给 python/node 会变 ? → 脚本写文件再执行
+- 写 seed.ts 用 Python 生成 TS 代码（Node 模板字符串地狱）
+
+---# StudyPet — AI 专升本备考助手
 
 ## 项目概述
 React + TypeScript + Zustand 前端项目，宠兽养成×学习管理。本地开发服务端口 19998（API + AI 教练），5173（Vite）。
