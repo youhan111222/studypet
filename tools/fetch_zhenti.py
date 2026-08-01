@@ -130,6 +130,36 @@ def parse_generic_page(html):
     return out
 
 
+def load_existing_stems(seed_path="src/seed.ts"):
+    """读取 seed.ts 中已录题目的题干，用于去重。"""
+    try:
+        text = open(seed_path, encoding="utf-8").read()
+    except OSError:
+        return set()
+    stems = set()
+    for m in re.finditer(r"stem:\s*[\'\"]([^\'\"]{10,})[\'\"]", text):
+        key = re.sub(r"[\s\\_（）()、，。·-]", "", m.group(1))
+        stems.add(key)
+    return stems
+
+
+def dedup(data, seed_path="src/seed.ts"):
+    """按题干归一化去重（与 seed.ts 已有题目 + 数据内部）。返回 (new_items, dup_ids)。"""
+    existing = load_existing_stems(seed_path)
+    seen = set(existing)
+    new_items, dup_ids = [], []
+    for item in data:
+        key = re.sub(r"[\s\\_（）()、，。·-]", "", item.get("stem", ""))
+        if not key:
+            continue
+        if key in seen:
+            dup_ids.append(item.get("id") or item.get("num"))
+        else:
+            seen.add(key)
+            new_items.append(item)
+    return new_items, dup_ids
+
+
 def gen_seed(data, answers, subject, chapter_map=None):
     """生成 seed.ts 片段；answers: {id 或 num: {answer, analysis}}"""
     lines = []
@@ -167,6 +197,7 @@ def main():
     p3.add_argument("--out", required=True)
 
     p4 = sub.add_parser("gen", help="生成 seed.ts 片段")
+    p4.add_argument("--dedup", action="store_true", help="与 src/seed.ts 已有题目去重")
     p4.add_argument("--data", required=True)
     p4.add_argument("--answers")
     p4.add_argument("--subject", default="politics")
@@ -203,6 +234,9 @@ def main():
     elif args.cmd == "gen":
         data = json.load(open(args.data, encoding="utf-8"))
         answers = json.load(open(args.answers, encoding="utf-8")) if args.answers else None
+        if args.dedup:
+            data, dup_ids = dedup(data)
+            print(f"[dedup] 去重后 {len(data)} 题，重复 {len(dup_ids)}: {dup_ids[:10]}{'...' if len(dup_ids) > 10 else ''}", file=sys.stderr)
         text = gen_seed(data, answers, args.subject)
         if args.out:
             open(args.out, "w", encoding="utf-8").write(text)
